@@ -207,7 +207,7 @@ const login = async ({ email, password }) => {
   if (user) {
     const isPasswordMatch = await bcrypt.compare(password, user.passwordHash);
     if (!isPasswordMatch) {
-      const error = new Error('invalid credentials');
+      const error = new Error('Invalid username or password.');
       error.statusCode = 401;
       throw error;
     }
@@ -229,14 +229,14 @@ const login = async ({ email, password }) => {
 
   const pending = await userStore.findPendingByEmail(email);
   if (!pending) {
-    const error = new Error('invalid credentials');
+    const error = new Error('Invalid username or password.');
     error.statusCode = 401;
     throw error;
   }
 
   const isPasswordMatch = await bcrypt.compare(password, pending.passwordHash);
   if (!isPasswordMatch) {
-    const error = new Error('invalid credentials');
+    const error = new Error('Invalid username or password.');
     error.statusCode = 401;
     throw error;
   }
