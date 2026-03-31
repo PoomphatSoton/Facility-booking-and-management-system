@@ -88,6 +88,16 @@ const initDb = async () => {
   `);
 
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS public.pending_password_resets (
+      reset_request_id TEXT PRIMARY KEY,
+      user_id INTEGER NOT NULL UNIQUE REFERENCES public.users(id) ON DELETE CASCADE,
+      email TEXT NOT NULL,
+      otp TEXT NOT NULL,
+      created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS public.staff_roles (
       role_id SERIAL PRIMARY KEY,
       role_name VARCHAR(100) NOT NULL UNIQUE
@@ -126,7 +136,7 @@ const initDb = async () => {
       CONSTRAINT member_skills_skill_level_check CHECK (skill_level IN ('beginner', 'intermediate', 'advanced'))
     )
   `);
-
+ 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS public.member_sport_preferences (
       member_sport_preference_id SERIAL PRIMARY KEY,

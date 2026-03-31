@@ -19,6 +19,13 @@ const mapPending = (row) => ({
   otpVerified: row.otp_verified,
 });
 
+const mapPendingPasswordReset = (row) => ({
+  resetRequestId: row.reset_request_id,
+  userId: String(row.user_id),
+  email: row.email,
+  otp: row.otp,
+});
+
 const toNullableTrimmedText = (value) => {
   if (value === null || value === undefined) {
     return null;
@@ -117,6 +124,93 @@ const removePendingByRegistrationId = async (registrationId) => {
   await pool.query('DELETE FROM public.pending_registrations WHERE registration_id = $1', [registrationId]);
 };
 
+const createPendingPasswordReset = async ({ userId, email, otp }) => {
+  const normalizedEmail = email.trim().toLowerCase();
+  const resetRequestId = `pwd_${randomUUID()}`;
+
+  const { rows } = await pool.query(
+    `
+      INSERT INTO public.pending_password_resets (reset_request_id, user_id, email, otp)
+      VALUES ($1, $2, $3, $4)
+      RETURNING reset_request_id, user_id, email, otp
+    `,
+    [resetRequestId, userId, normalizedEmail, String(otp)]
+  );
+
+  return mapPendingPasswordReset(rows[0]);
+};
+
+const findPendingPasswordResetByEmail = async (email) => {
+  if (!email) {
+    return null;
+  }
+
+  const normalizedEmail = email.trim().toLowerCase();
+  const { rows } = await pool.query(
+    `
+      SELECT reset_request_id, user_id, email, otp
+      FROM public.pending_password_resets
+      WHERE email = $1
+      LIMIT 1
+    `,
+    [normalizedEmail]
+  );
+
+  return rows[0] ? mapPendingPasswordReset(rows[0]) : null;
+};
+
+const findPendingPasswordResetByRequestId = async (resetRequestId) => {
+  const { rows } = await pool.query(
+    `
+      SELECT reset_request_id, user_id, email, otp
+      FROM public.pending_password_resets
+      WHERE reset_request_id = $1
+      LIMIT 1
+    `,
+    [resetRequestId]
+  );
+
+  return rows[0] ? mapPendingPasswordReset(rows[0]) : null;
+};
+
+const updatePendingPasswordReset = async (resetRequestId, updates) => {
+  const pending = await findPendingPasswordResetByRequestId(resetRequestId);
+  if (!pending) {
+    return null;
+  }
+
+  const nextOtp = updates.otp !== undefined ? String(updates.otp) : pending.otp;
+  const { rows } = await pool.query(
+    `
+      UPDATE public.pending_password_resets
+      SET otp = $2
+      WHERE reset_request_id = $1
+      RETURNING reset_request_id, user_id, email, otp
+    `,
+    [resetRequestId, nextOtp]
+  );
+
+  return rows[0] ? mapPendingPasswordReset(rows[0]) : null;
+};
+
+const removePendingPasswordResetByRequestId = async (resetRequestId) => {
+  await pool.query('DELETE FROM public.pending_password_resets WHERE reset_request_id = $1', [resetRequestId]);
+};
+
+const updatePasswordById = async (id, passwordHash) => {
+  const { rows } = await pool.query(
+    `
+      UPDATE public.users
+      SET password_hash = $2
+      WHERE id = $1
+      RETURNING id, email, password_hash, first_name, last_name, date_of_birth, address
+    `,
+    [id, passwordHash]
+  );
+
+  return rows[0] ? mapUser(rows[0]) : null;
+};
+
 const create = async ({ email, passwordHash, firstName, lastName, dateOfBirth, address }) => {
   const normalizedEmail = email.trim().toLowerCase();
   console.log("Email = ", email)
@@ -196,18 +290,26 @@ const updateProfileById = async (id, { firstName, lastName, dateOfBirth, address
 };
 
 const reset = async () => {
-  await pool.query('TRUNCATE TABLE public.pending_registrations, public.users RESTART IDENTITY CASCADE');
+  await pool.query(
+    'TRUNCATE TABLE public.pending_password_resets, public.pending_registrations, public.users RESTART IDENTITY CASCADE'
+  );
 };
 
 module.exports = {
   create,
   createPendingRegistration,
+  createPendingPasswordReset,
   findByEmail,
   findById,
   findPendingByEmail,
+  findPendingPasswordResetByEmail,
+  findPendingPasswordResetByRequestId,
   findPendingByRegistrationId,
   markOtpVerified,
+  removePendingPasswordResetByRequestId,
   updatePendingRegistration,
+  updatePendingPasswordReset,
+  updatePasswordById,
   updateProfileById,
   removePendingByRegistrationId,
   reset,
