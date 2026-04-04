@@ -151,8 +151,15 @@ const initDb = async () => {
       name VARCHAR(100) NOT NULL,
       description TEXT,
       usage_guideline TEXT,
+      max_people INTEGER NOT NULL DEFAULT 1 CHECK (max_people > 0),
       created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
     )
+  `);
+
+  // Backfill schema for existing databases created before max_people was introduced.
+  await pool.query(`
+    ALTER TABLE public.facilities
+    ADD COLUMN IF NOT EXISTS max_people INTEGER NOT NULL DEFAULT 1
   `);
 
   await pool.query(`
@@ -162,9 +169,50 @@ const initDb = async () => {
       day_of_week TEXT NOT NULL,
       start_time TIME NOT NULL,
       end_time TIME NOT NULL,
-      slot_duration INTEGER,
       CONSTRAINT facility_schedules_day_of_week_check CHECK (day_of_week IN ('mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'))
     )
+  `);
+
+  // Backfill schema for existing databases that still include slot_duration.
+  await pool.query(`
+    ALTER TABLE public.facility_schedules
+    DROP COLUMN IF EXISTS slot_duration
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS public.facility_slot_times (
+      slot_time_id SERIAL PRIMARY KEY,
+      facility_id INTEGER NOT NULL REFERENCES public.facilities(facility_id) ON DELETE CASCADE,
+      slot_date DATE NOT NULL,
+      slot_start_time TIME NOT NULL,
+      slot_end_time TIME NOT NULL,
+      is_booking BOOLEAN NOT NULL DEFAULT FALSE,
+      created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+      CONSTRAINT facility_slot_times_time_check CHECK (slot_start_time < slot_end_time),
+      CONSTRAINT facility_slot_times_unique_slot UNIQUE (facility_id, slot_date, slot_start_time, slot_end_time)
+    )
+  `);
+
+  // Backfill schema for existing databases before slot_date was introduced.
+  await pool.query(`
+    ALTER TABLE public.facility_slot_times
+    ADD COLUMN IF NOT EXISTS slot_date DATE NOT NULL DEFAULT CURRENT_DATE
+  `);
+
+  // Backfill schema for existing databases before is_booking was introduced.
+  await pool.query(`
+    ALTER TABLE public.facility_slot_times
+    ADD COLUMN IF NOT EXISTS is_booking BOOLEAN NOT NULL DEFAULT FALSE
+  `);
+
+  await pool.query(`
+    ALTER TABLE public.facility_slot_times
+    DROP CONSTRAINT IF EXISTS facility_slot_times_unique_slot
+  `);
+
+  await pool.query(`
+    ALTER TABLE public.facility_slot_times
+    ADD CONSTRAINT facility_slot_times_unique_slot UNIQUE (facility_id, slot_date, slot_start_time, slot_end_time)
   `);
 
   await pool.query(`
