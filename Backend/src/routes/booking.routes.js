@@ -12,4 +12,12 @@ router.get(
     bookingController.getAvailableSlots
 );
 
+// Member submits a reservation request
+router.post(
+    '/requests',
+    requireAuth,
+    requireRole(['member']),
+    bookingController.submitBookingRequest
+);
+
 module.exports = router;
