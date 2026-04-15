@@ -7,6 +7,7 @@ import { facilityService } from "~/services/facility.service";
 import type { FacilityCardItem } from "~/services/types";
 
 type FacilityUiItem = {
+    facilityId: number;
     name: string;
     category: string;
     description: string;
@@ -46,6 +47,7 @@ export default function FacilityList() {
             : ["No usage guideline available"];
 
         return {
+            facilityId: card.facilityId,
             name: card.name,
             category: "Other",
             description: card.description || "No description available",
@@ -215,6 +217,7 @@ export default function FacilityList() {
             <div className="facility-list-container">
                 {filteredFacilities.map((facility) => (
                     <FacilityCard
+                        facilityId={facility.facilityId}
                         key={facility.name}
                         name={facility.name}
                         description={facility.description}
