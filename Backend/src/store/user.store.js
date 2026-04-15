@@ -9,6 +9,8 @@ const mapUser = (row) => ({
   lastName: row.last_name,
   dateOfBirth: row.date_of_birth,
   address: row.address,
+  role: row.role,
+  accountStatus: row.account_status,
 });
 
 const mapPending = (row) => ({
@@ -241,7 +243,7 @@ const findByEmail = async (email) => {
   const normalizedEmail = email.trim().toLowerCase();
   const { rows } = await pool.query(
     `
-      SELECT id, email, password_hash, first_name, last_name, date_of_birth, address
+      SELECT id, email, password_hash, first_name, last_name, date_of_birth, address, role, account_status
       FROM public.users
       WHERE email = $1
       LIMIT 1
@@ -255,7 +257,7 @@ const findByEmail = async (email) => {
 const findById = async (id) => {
   const { rows } = await pool.query(
     `
-      SELECT id, email, password_hash, first_name, last_name, date_of_birth, address
+      SELECT id, email, password_hash, first_name, last_name, date_of_birth, address, role, account_status
       FROM public.users
       WHERE id = $1
       LIMIT 1
