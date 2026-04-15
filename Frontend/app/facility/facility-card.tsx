@@ -1,9 +1,11 @@
 import { useState } from "react";
+import { useNavigate } from "react-router";
 import { Button, Modal } from "react-bootstrap";
 import Card from "react-bootstrap/Card";
 import "./facility.css";
 
 type FacilityCardProps = {
+    facilityId: number;
     name: string;
     description: string;
     currentOpening: {
@@ -32,6 +34,7 @@ const truncateText = (text: string, maxLength: number) => {
 };
 
 export default function FacilityCard({
+    facilityId,
     name,
     description,
     currentOpening,
@@ -42,6 +45,7 @@ export default function FacilityCard({
     usageGuidelines,
     imageUrl,
 }: FacilityCardProps) {
+    const navigate = useNavigate();
     const [isSlotModalOpen, setIsSlotModalOpen] = useState(false);
     const [isOpeningModalOpen, setIsOpeningModalOpen] = useState(false);
     const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
@@ -156,7 +160,7 @@ export default function FacilityCard({
                         </div>
                     </div>
                     <div className="facility-card-actions">
-                        <Button variant="primary">Book Now</Button>
+                        <Button variant="primary" onClick={() => navigate(`/booking/new/${facilityId}`)}>Book Now</Button>
                     </div>
                 </Card.Body>
             </Card>

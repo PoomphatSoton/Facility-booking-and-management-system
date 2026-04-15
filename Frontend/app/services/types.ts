@@ -154,3 +154,47 @@ export interface FacilityCardsResponse {
   message?: string;
   detail?: string;
 }
+
+// ==================== Booking ====================
+
+export interface AvailableSlot {
+  slotTimeId: number;
+  slotDate: string;       // 'YYYY-MM-DD'
+  startTime: string;      // 'HH:MM'
+  endTime: string;        // 'HH:MM'
+  occupied: number;
+  available: boolean;
+}
+
+export interface FacilitySlots {
+  facilityId: number;
+  facilityName: string;
+  maxPeople: number;
+  slots: AvailableSlot[];
+}
+
+export interface FacilitySlotsResponse {
+  status: 'ok' | 'error';
+  data: FacilitySlots;
+  message?: string;
+}
+
+export interface SubmitBookingRequestPayload {
+  facilityId: number;
+  slotDate: string;
+  startTime: string;
+  endTime: string;
+  intendedActivity: string;
+}
+
+export interface SubmitBookingRequestResponse {
+  status: 'ok' | 'error';
+  data?: {
+    bookingRequestId: number;
+    bookingDetailId: number;
+    status: string;
+    createdAt: string;
+  };
+  message?: string;
+  code?: string;
+}
