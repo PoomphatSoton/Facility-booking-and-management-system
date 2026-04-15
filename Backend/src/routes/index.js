@@ -5,6 +5,7 @@ const facilityRoutes = require('./facility.routes');
 const bookingRoutes = require('./booking.routes');
 const equipmentReportRoutes = require('./equipment-report.routes');
 const partnerMatchingRoutes = require('./partner-matching.routes');
+const bookingRoutes = require('./booking.routes');
 
 const router = express.Router();
 
@@ -14,5 +15,6 @@ router.use('/facilities', facilityRoutes);
 router.use('/bookings', bookingRoutes);
 router.use('/equipment-reports', equipmentReportRoutes);
 router.use('/partner-matching', partnerMatchingRoutes);
+router.use('/bookings', bookingRoutes);
 
 module.exports = router;
