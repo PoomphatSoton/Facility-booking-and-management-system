@@ -26,6 +26,8 @@ const requireAuth = async (req, res, next) => {
       lastName: user.lastName,
       dateOfBirth: user.dateOfBirth,
       address: user.address,
+      role: user.role,
+      accountStatus: user.accountStatus,
     };
 
     return next();
@@ -34,6 +36,21 @@ const requireAuth = async (req, res, next) => {
   }
 };
 
+const requireRole = (allowedRoles) => {
+  return (req, res, next) => {
+    if (!req.user) {
+      return res.status(401).json({ message: 'authentication required' });
+    }
+    if (!allowedRoles.includes(req.user.role)) {
+      return res.status(403).json({
+        message: `forbidden: requires role ${allowedRoles.join(' or ')}`
+      });
+    }
+    return next();
+  };
+};
+
 module.exports = {
   requireAuth,
+  requireRole,
 };
