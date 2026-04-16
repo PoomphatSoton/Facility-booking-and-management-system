@@ -184,7 +184,77 @@ const submitBookingRequest = async ({
     };
 };
 
+/**
+ * Retrieve all pending reservation requests for the venues managed by a specific staff member
+ * @param {string} userId - user_id
+ * @returns {Array} List of pending approval requests
+ */
+const getPendingRequestsForStaff = async (userId) => {
+    // 1. user staff_id
+    const staffResult = await pool.query(
+        `SELECT staff_id FROM public.staff WHERE user_id = $1`,
+        [userId]
+    );
+    if (staffResult.rows.length === 0) {
+        throw new Error('STAFF_NOT_FOUND');
+    }
+    const staffId = staffResult.rows[0].staff_id;
+
+    // 2. Retrieve all pending requests for the venues managed by this staff member
+    const result = await pool.query(
+        `
+    SELECT
+      br.booking_request_id,
+      br.request_status,
+      br.created_at,
+      bd.booking_detail_id,
+      bd.facility_id,
+      f.name AS facility_name,
+      bd.date,
+      TO_CHAR(bd.start_time, 'HH24:MI') AS start_time,
+      TO_CHAR(bd.end_time, 'HH24:MI') AS end_time,
+      bd.intended_activity,
+      bd.member_id,
+      u.first_name AS member_first_name,
+      u.last_name AS member_last_name,
+      u.email AS member_email
+    FROM public.booking_requests br
+    JOIN public.booking_details bd ON br.booking_detail_id = bd.booking_detail_id
+    JOIN public.facilities f ON bd.facility_id = f.facility_id
+    JOIN public.staff_facilities sf ON sf.facility_id = bd.facility_id
+    JOIN public.members m ON bd.member_id = m.member_id
+    JOIN public.users u ON m.user_id = u.id
+    WHERE sf.staff_id = $1
+      AND br.request_status = 'pending'
+    ORDER BY br.created_at ASC
+    `,
+        [staffId]
+    );
+
+    return result.rows.map((row) => ({
+        bookingRequestId: row.booking_request_id,
+        bookingDetailId: row.booking_detail_id,
+        requestStatus: row.request_status,
+        createdAt: row.created_at,
+        facility: {
+            facilityId: row.facility_id,
+            name: row.facility_name,
+        },
+        bookingDate: row.date.toISOString().slice(0, 10),
+        startTime: row.start_time,
+        endTime: row.end_time,
+        intendedActivity: row.intended_activity,
+        member: {
+            memberId: row.member_id,
+            firstName: row.member_first_name,
+            lastName: row.member_last_name,
+            email: row.member_email,
+        },
+    }));
+};
+
 module.exports = {
     getAvailableSlots,
     submitBookingRequest,
+    getPendingRequestsForStaff,
 };

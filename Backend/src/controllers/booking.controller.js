@@ -76,7 +76,29 @@ const submitBookingRequest = async (req, res) => {
     }
 };
 
+const getPendingRequests = async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const result = await bookingService.getPendingRequestsForStaff(userId);
+        return res.status(200).json({ status: 'ok', data: result });
+    } catch (error) {
+        if (error.message === 'STAFF_NOT_FOUND') {
+            return res.status(404).json({
+                status: 'error',
+                message: 'staff record not found for this user',
+            });
+        }
+        console.error('getPendingRequests error:', error);
+        return res.status(500).json({
+            status: 'error',
+            message: 'internal server error',
+            detail: error.message,
+        });
+    }
+};
+
 module.exports = {
     getAvailableSlots,
     submitBookingRequest,
+    getPendingRequests,
 };
