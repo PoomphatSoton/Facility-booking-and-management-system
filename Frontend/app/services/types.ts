@@ -198,3 +198,36 @@ export interface SubmitBookingRequestResponse {
   message?: string;
   code?: string;
 }
+
+// ==================== Staff Pending Requests ====================
+
+export interface PendingRequestMember {
+  memberId: number;
+  firstName: string;
+  lastName: string;
+  email: string;
+}
+
+export interface PendingRequestFacility {
+  facilityId: number;
+  name: string;
+}
+
+export interface PendingBookingRequest {
+  bookingRequestId: number;
+  bookingDetailId: number;
+  requestStatus: string;
+  createdAt: string;
+  facility: PendingRequestFacility;
+  bookingDate: string;
+  startTime: string;
+  endTime: string;
+  intendedActivity: string | null;
+  member: PendingRequestMember;
+}
+
+export interface PendingRequestsResponse {
+  status: "ok" | "error";
+  data: PendingBookingRequest[];
+  message?: string;
+}
