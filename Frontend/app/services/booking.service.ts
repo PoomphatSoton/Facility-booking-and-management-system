@@ -3,6 +3,7 @@ import type {
     FacilitySlotsResponse,
     SubmitBookingRequestPayload,
     SubmitBookingRequestResponse,
+    PendingRequestsResponse,
 } from "./types";
 
 export const bookingService = {
@@ -21,6 +22,14 @@ export const bookingService = {
         const response = await api.post<SubmitBookingRequestResponse>(
             `/bookings/requests`,
             payload
+        );
+        return response.data;
+    },
+
+    // Employees obtain the list pending approval
+    async getPendingRequests(): Promise<PendingRequestsResponse> {
+        const response = await api.get<PendingRequestsResponse>(
+            `/bookings/staff/pending`
         );
         return response.data;
     },

@@ -5,22 +5,20 @@ import { bookingService } from "~/services/booking.service";
 import type { AvailableSlot, FacilitySlots } from "~/services/types";
 
 export default function NewBooking() {
-    // 从 URL 拿 facilityId,例如 /booking/new/1 → facilityId = "1"
+
     const { facilityId } = useParams<{ facilityId: string }>();
     const navigate = useNavigate();
 
-    // 页面状态
     const [facilityData, setFacilityData] = useState<FacilitySlots | null>(null);
     const [selectedSlot, setSelectedSlot] = useState<AvailableSlot | null>(null);
     const [activity, setActivity] = useState("");
 
-    // UI 状态
     const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
     const [errorMsg, setErrorMsg] = useState("");
     const [successMsg, setSuccessMsg] = useState("");
 
-    // 页面加载时,拉取该场馆的可用时段
+    // Fetch the available time slots for this venue when the page loads.
     useEffect(() => {
         const loadSlots = async () => {
             if (!facilityId) return;
@@ -44,7 +42,7 @@ export default function NewBooking() {
         void loadSlots();
     }, [facilityId]);
 
-    // 提交预约
+    // submit
     const handleSubmit = async () => {
         if (!selectedSlot || !facilityData) {
             setErrorMsg("Please select a time slot first");
@@ -70,13 +68,12 @@ export default function NewBooking() {
                 setSuccessMsg(
                     "Booking request submitted! Waiting for staff approval."
                 );
-                // 3 秒后跳回首页
+                // Redirect to the homepage in 3 seconds
                 setTimeout(() => navigate("/"), 3000);
             } else {
                 setErrorMsg(response.message || "Failed to submit");
             }
         } catch (err: any) {
-            // axios 拦截后错误结构在 err.message 或 err 本身
             const apiMessage = err?.message || "Failed to submit booking request";
             setErrorMsg(apiMessage);
         } finally {
@@ -84,7 +81,6 @@ export default function NewBooking() {
         }
     };
 
-    // ============= 渲染 =============
 
     if (loading) {
         return (
@@ -106,7 +102,6 @@ export default function NewBooking() {
     );
     }
 
-    // 把时段按日期分组,方便展示
     const slotsByDate = facilityData.slots.reduce<Record<string, AvailableSlot[]>>(
         (acc, slot) => {
             if (!acc[slot.slotDate]) acc[slot.slotDate] = [];
@@ -134,7 +129,7 @@ export default function NewBooking() {
     {errorMsg && <Alert variant="danger">{errorMsg}</Alert>}
         {successMsg && <Alert variant="success">{successMsg}</Alert>}
 
-            {/* 时段选择 */}
+            {/* Time Slot Selection */}
             <Card className="mb-4">
                 <Card.Body>
                     <Card.Title>1. Select a time slot</Card.Title>
@@ -172,7 +167,7 @@ export default function NewBooking() {
             </Card.Body>
             </Card>
 
-            {/* 活动描述 */}
+            {/* Activity Description */}
             <Card className="mb-4">
                 <Card.Body>
                     <Card.Title>2. Describe your intended activity</Card.Title>
@@ -190,7 +185,7 @@ export default function NewBooking() {
         </Card.Body>
         </Card>
 
-            {/* 已选时段提示 */}
+            {/* Selected Time Slot Reminder */}
             {selectedSlot && (
                 <Alert variant="info">
                     <strong>Your booking:</strong> {facilityData.facilityName} on{" "}
@@ -199,7 +194,7 @@ export default function NewBooking() {
                 </Alert>
             )}
 
-            {/* 提交按钮 */}
+            {/* bottom */}
             <div className="d-flex gap-2">
             <Button
                 variant="primary"
