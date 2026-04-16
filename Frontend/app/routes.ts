@@ -17,6 +17,7 @@ export default [
   route("equipment-reports-admin", "equipment-report/equipment-report-admin.tsx"),
   route("find-partners", "partner-matching/find-partners.tsx"),
   route("partner-requests", "partner-matching/partner-requests.tsx"),
+  route("staff/pending", "staff/pending-requests.tsx"),
   layout("auth/layout.tsx", [
     route("auth/login", "auth/login.tsx"),
     route("auth/register", "auth/register.tsx"),
