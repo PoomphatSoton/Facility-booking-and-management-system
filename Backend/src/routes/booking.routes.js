@@ -20,4 +20,12 @@ router.post(
     bookingController.submitBookingRequest
 );
 
+// Staff view all pending requests for the facilities they are responsible for
+router.get(
+    '/staff/pending',
+    requireAuth,
+    requireRole(['staff']),
+    bookingController.getPendingRequests
+);
+
 module.exports = router;
