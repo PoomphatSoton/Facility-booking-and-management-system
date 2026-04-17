@@ -4,6 +4,8 @@ import type {
     SubmitBookingRequestPayload,
     SubmitBookingRequestResponse,
     PendingRequestsResponse,
+    ApproveResponse,
+    RejectResponse,
 } from "./types";
 
 export const bookingService = {
@@ -30,6 +32,27 @@ export const bookingService = {
     async getPendingRequests(): Promise<PendingRequestsResponse> {
         const response = await api.get<PendingRequestsResponse>(
             `/bookings/staff/pending`
+        );
+        return response.data;
+    },
+
+    // Staff Approve
+    async approveRequest(requestId: number): Promise<ApproveResponse> {
+        const response = await api.post<ApproveResponse>(
+            `/bookings/requests/${requestId}/approve`,
+            {}
+        );
+        return response.data;
+    },
+
+    // Staff Reject
+    async rejectRequest(
+        requestId: number,
+        reason: string
+    ): Promise<RejectResponse> {
+        const response = await api.post<RejectResponse>(
+            `/bookings/requests/${requestId}/reject`,
+            { reason }
         );
         return response.data;
     },

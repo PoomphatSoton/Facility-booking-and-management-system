@@ -28,4 +28,20 @@ router.get(
     bookingController.getPendingRequests
 );
 
+// approve
+router.post(
+    '/requests/:requestId/approve',
+    requireAuth,
+    requireRole(['staff']),
+    bookingController.approveRequest
+);
+
+// reject
+router.post(
+    '/requests/:requestId/reject',
+    requireAuth,
+    requireRole(['staff']),
+    bookingController.rejectRequest
+);
+
 module.exports = router;

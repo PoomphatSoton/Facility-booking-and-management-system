@@ -253,8 +253,285 @@ const getPendingRequestsForStaff = async (userId) => {
     }));
 };
 
+/**
+ * Unified Conflict Detection Function
+ * @param {number} bookingRequestId
+ * @param {number} staffId - staff_id
+ * @returns {Object} { errors: string[], requestDetail: Object }
+ */
+const checkBookingConflict = async (bookingRequestId, staffId) => {
+    const errors = [];
+
+    // 1. Query request details
+    const detailResult = await pool.query(
+        `
+    SELECT
+      br.booking_request_id,
+      br.request_status,
+      bd.booking_detail_id,
+      bd.facility_id,
+      bd.date,
+      bd.start_time,
+      bd.end_time,
+      bd.intended_activity,
+      bd.member_id,
+      f.name AS facility_name,
+      f.max_people,
+      u.account_status AS member_account_status,
+      u.first_name AS member_first_name,
+      u.last_name AS member_last_name
+    FROM public.booking_requests br
+    JOIN public.booking_details bd ON br.booking_detail_id = bd.booking_detail_id
+    JOIN public.facilities f ON bd.facility_id = f.facility_id
+    JOIN public.members m ON bd.member_id = m.member_id
+    JOIN public.users u ON m.user_id = u.id
+    WHERE br.booking_request_id = $1
+    `,
+        [bookingRequestId]
+    );
+
+    if (detailResult.rows.length === 0) {
+        errors.push('REQUEST_NOT_FOUND');
+        return { errors, requestDetail: null };
+    }
+
+    const detail = detailResult.rows[0];
+
+    // 2. must be pending
+    if (detail.request_status !== 'pending') {
+        errors.push('REQUEST_ALREADY_PROCESSED');
+    }
+
+    // 3. The employee must be in charge of this venue
+    const staffFacilityResult = await pool.query(
+        `SELECT staff_facility_id FROM public.staff_facilities
+     WHERE staff_id = $1 AND facility_id = $2`,
+        [staffId, detail.facility_id]
+    );
+    if (staffFacilityResult.rows.length === 0) {
+        errors.push('STAFF_NOT_AUTHORIZED');
+    }
+
+    // 4. The member account must be active
+    if (detail.member_account_status !== 'active') {
+        errors.push('MEMBER_INACTIVE');
+    }
+
+    // 5. Time slot capacity check
+    // new_start < existing_end AND new_end > existing_start
+    const occupancyResult = await pool.query(
+        `
+    SELECT COUNT(*) AS occupied_count
+    FROM public.bookings b
+    JOIN public.booking_details bd ON b.booking_detail_id = bd.booking_detail_id
+    WHERE bd.facility_id = $1
+      AND bd.date = $2
+      AND bd.start_time < $4
+      AND bd.end_time > $3
+      AND b.booking_status != 'cancelled'
+    `,
+        [detail.facility_id, detail.date, detail.start_time, detail.end_time]
+    );
+    const occupied = parseInt(occupancyResult.rows[0].occupied_count, 10);
+    if (occupied >= detail.max_people) {
+        errors.push('CAPACITY_EXCEEDED');
+    }
+
+    return {
+        errors,
+        requestDetail: {
+            bookingRequestId: detail.booking_request_id,
+            bookingDetailId: detail.booking_detail_id,
+            facilityId: detail.facility_id,
+            facilityName: detail.facility_name,
+            maxPeople: detail.max_people,
+            date: detail.date,
+            startTime: detail.start_time,
+            endTime: detail.end_time,
+            intendedActivity: detail.intended_activity,
+            memberId: detail.member_id,
+            memberFirstName: detail.member_first_name,
+            memberLastName: detail.member_last_name,
+            currentOccupied: occupied,
+        },
+    };
+};
+
+/**
+ * Staff approves reservation request
+ * @param {number} bookingRequestId
+ * @param {string} userId - user_id
+ * @returns {Object} result
+ */
+const approveRequest = async (bookingRequestId, userId) => {
+    // 1. find staff_id
+    const staffResult = await pool.query(
+        `SELECT staff_id FROM public.staff WHERE user_id = $1`,
+        [userId]
+    );
+    if (staffResult.rows.length === 0) {
+        throw new Error('STAFF_NOT_FOUND');
+    }
+    const staffId = staffResult.rows[0].staff_id;
+
+    // 2. Conflict detection
+    const { errors, requestDetail } = await checkBookingConflict(bookingRequestId, staffId);
+    if (errors.length > 0) {
+        const err = new Error('CONFLICT');
+        err.conflicts = errors;
+        err.detail = requestDetail;
+        throw err;
+    }
+
+    // 3. update booking_requests.status = 'approved'
+    await pool.query(
+        `UPDATE public.booking_requests
+     SET request_status = 'approved'
+     WHERE booking_request_id = $1`,
+        [bookingRequestId]
+    );
+
+    // 4. Insert a reservation into the bookings table(status = 'upcoming')
+    await pool.query(
+        `UPDATE public.booking_details
+     SET staff_id = $2
+     WHERE booking_detail_id = $1`,
+        [requestDetail.bookingDetailId, staffId]
+    );
+
+    const bookingResult = await pool.query(
+        `INSERT INTO public.bookings (booking_detail_id, booking_status)
+     VALUES ($1, 'upcoming')
+     RETURNING booking_id, booking_status, created_at`,
+        [requestDetail.bookingDetailId]
+    );
+
+    // 5. Send a notification to the member
+    const memberUserResult = await pool.query(
+        `SELECT user_id FROM public.members WHERE member_id = $1`,
+        [requestDetail.memberId]
+    );
+    if (memberUserResult.rows.length > 0) {
+        const memberUserId = memberUserResult.rows[0].user_id;
+        await pool.query(
+            `INSERT INTO public.notification_histories (user_id, message, type)
+       VALUES ($1, $2, 'booking_approved')`,
+            [
+                memberUserId,
+                `Your booking for ${requestDetail.facilityName} on ${requestDetail.date.toISOString().slice(0, 10)} (${requestDetail.startTime}-${requestDetail.endTime}) has been approved.`,
+            ]
+        );
+    }
+
+    return {
+        bookingRequestId,
+        bookingId: bookingResult.rows[0].booking_id,
+        bookingStatus: bookingResult.rows[0].booking_status,
+        message: `Booking approved for ${requestDetail.facilityName}`,
+    };
+};
+
+/**
+ * Staff rejects reservation request
+ * @param {number} bookingRequestId
+ * @param {string} userId - user_id
+ * @param {string} reason - reason
+ * @returns {Object} result
+ */
+const rejectRequest = async (bookingRequestId, userId, reason) => {
+    // 1. find staff_id
+    const staffResult = await pool.query(
+        `SELECT staff_id FROM public.staff WHERE user_id = $1`,
+        [userId]
+    );
+    if (staffResult.rows.length === 0) {
+        throw new Error('STAFF_NOT_FOUND');
+    }
+    const staffId = staffResult.rows[0].staff_id;
+
+    // 2. details
+    const detailResult = await pool.query(
+        `
+    SELECT
+      br.booking_request_id,
+      br.request_status,
+      bd.booking_detail_id,
+      bd.facility_id,
+      bd.date,
+      bd.start_time,
+      bd.end_time,
+      bd.member_id,
+      f.name AS facility_name
+    FROM public.booking_requests br
+    JOIN public.booking_details bd ON br.booking_detail_id = bd.booking_detail_id
+    JOIN public.facilities f ON bd.facility_id = f.facility_id
+    WHERE br.booking_request_id = $1
+    `,
+        [bookingRequestId]
+    );
+
+    if (detailResult.rows.length === 0) {
+        throw new Error('REQUEST_NOT_FOUND');
+    }
+    const detail = detailResult.rows[0];
+
+    if (detail.request_status !== 'pending') {
+        throw new Error('REQUEST_ALREADY_PROCESSED');
+    }
+
+    // 3. Verify that the employee is responsible for this facility
+    const sfResult = await pool.query(
+        `SELECT staff_facility_id FROM public.staff_facilities
+     WHERE staff_id = $1 AND facility_id = $2`,
+        [staffId, detail.facility_id]
+    );
+    if (sfResult.rows.length === 0) {
+        throw new Error('STAFF_NOT_AUTHORIZED');
+    }
+
+    // 4. update rejected
+    await pool.query(
+        `UPDATE public.booking_requests
+     SET request_status = 'rejected'
+     WHERE booking_request_id = $1`,
+        [bookingRequestId]
+    );
+
+    // 5. record the staff
+    await pool.query(
+        `UPDATE public.booking_details
+     SET staff_id = $2
+     WHERE booking_detail_id = $1`,
+        [detail.booking_detail_id, staffId]
+    );
+
+    // 6. Send a notification to the member
+    const memberUserResult = await pool.query(
+        `SELECT user_id FROM public.members WHERE member_id = $1`,
+        [detail.member_id]
+    );
+    if (memberUserResult.rows.length > 0) {
+        const memberUserId = memberUserResult.rows[0].user_id;
+        const rejectMessage = reason
+            ? `Your booking for ${detail.facility_name} on ${detail.date.toISOString().slice(0, 10)} has been rejected. Reason: ${reason}`
+            : `Your booking for ${detail.facility_name} on ${detail.date.toISOString().slice(0, 10)} has been rejected.`;
+        await pool.query(
+            `INSERT INTO public.notification_histories (user_id, message, type)
+       VALUES ($1, $2, 'booking_rejected')`,
+            [memberUserId, rejectMessage]
+        );
+    }
+
+    return {
+        bookingRequestId,
+        message: `Booking rejected for ${detail.facility_name}`,
+    };
+};
+
 module.exports = {
     getAvailableSlots,
     submitBookingRequest,
     getPendingRequestsForStaff,
+    approveRequest,
+    rejectRequest,
 };

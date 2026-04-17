@@ -1,37 +1,118 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router";
-import { Alert, Badge, Button, Card, Spinner } from "react-bootstrap";
+import {
+    Alert,
+    Badge,
+    Button,
+    Card,
+    Form,
+    Modal,
+    Spinner,
+} from "react-bootstrap";
 import { bookingService } from "~/services/booking.service";
 import type { PendingBookingRequest } from "~/services/types";
 
 export default function PendingRequests() {
-    const navigate = useNavigate();
-
     const [requests, setRequests] = useState<PendingBookingRequest[]>([]);
     const [loading, setLoading] = useState(true);
     const [errorMsg, setErrorMsg] = useState("");
+    const [successMsg, setSuccessMsg] = useState("");
 
-    // Fetch the pending approval list when the page loads
-    useEffect(() => {
-        const loadRequests = async () => {
-            try {
-                setLoading(true);
-                setErrorMsg("");
-                const response = await bookingService.getPendingRequests();
-                if (response.status === "ok") {
-                    setRequests(response.data);
-                } else {
-                    setErrorMsg(response.message || "Failed to load requests");
-                }
-            } catch (err: any) {
-                setErrorMsg(err.message || "Failed to load requests");
-            } finally {
-                setLoading(false);
+    // Reject
+    const [rejectModalOpen, setRejectModalOpen] = useState(false);
+    const [rejectTargetId, setRejectTargetId] = useState<number | null>(null);
+    const [rejectReason, setRejectReason] = useState("");
+
+    // pending ID
+    const [processingId, setProcessingId] = useState<number | null>(null);
+
+    // load data
+    const loadRequests = async () => {
+        try {
+            setLoading(true);
+            setErrorMsg("");
+            const response = await bookingService.getPendingRequests();
+            if (response.status === "ok") {
+                setRequests(response.data);
+            } else {
+                setErrorMsg(response.message || "Failed to load requests");
             }
-        };
+        } catch (err: any) {
+            setErrorMsg(err.message || "Failed to load requests");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
         void loadRequests();
     }, []);
 
+    // Approve
+    const handleApprove = async (requestId: number) => {
+        const confirmed = window.confirm(
+            "Are you sure you want to approve this booking request?"
+        );
+        if (!confirmed) return;
+
+        try {
+            setProcessingId(requestId);
+            setErrorMsg("");
+            setSuccessMsg("");
+            const response = await bookingService.approveRequest(requestId);
+            if (response.status === "ok") {
+                setSuccessMsg(response.data?.message || "Request approved!");
+                // remove
+                setRequests((prev) =>
+                    prev.filter((r) => r.bookingRequestId !== requestId)
+                );
+            } else {
+                setErrorMsg(response.message || "Failed to approve");
+            }
+        } catch (err: any) {
+            const msg = err?.message || "Failed to approve request";
+            setErrorMsg(msg);
+        } finally {
+            setProcessingId(null);
+        }
+    };
+
+    // Reject
+    const openRejectModal = (requestId: number) => {
+        setRejectTargetId(requestId);
+        setRejectReason("");
+        setRejectModalOpen(true);
+    };
+
+    const handleReject = async () => {
+        if (rejectTargetId === null) return;
+
+        try {
+            setProcessingId(rejectTargetId);
+            setErrorMsg("");
+            setSuccessMsg("");
+            setRejectModalOpen(false);
+            const response = await bookingService.rejectRequest(
+                rejectTargetId,
+                rejectReason.trim()
+            );
+            if (response.status === "ok") {
+                setSuccessMsg(response.data?.message || "Request rejected.");
+                setRequests((prev) =>
+                    prev.filter((r) => r.bookingRequestId !== rejectTargetId)
+                );
+            } else {
+                setErrorMsg(response.message || "Failed to reject");
+            }
+        } catch (err: any) {
+            const msg = err?.message || "Failed to reject request";
+            setErrorMsg(msg);
+        } finally {
+            setProcessingId(null);
+            setRejectTargetId(null);
+        }
+    };
+
+    // time format
     const formatTimeAgo = (isoString: string) => {
         const then = new Date(isoString).getTime();
         const now = Date.now();
@@ -43,7 +124,6 @@ export default function PendingRequests() {
         const diffDays = Math.floor(diffHours / 24);
         return `${diffDays} day${diffDays > 1 ? "s" : ""} ago`;
     };
-
 
     if (loading) {
         return (
@@ -68,7 +148,16 @@ export default function PendingRequests() {
                 </Badge>
             </div>
 
-            {errorMsg && <Alert variant="danger">{errorMsg}</Alert>}
+            {errorMsg && (
+                <Alert variant="danger" dismissible onClose={() => setErrorMsg("")}>
+                    {errorMsg}
+                </Alert>
+            )}
+            {successMsg && (
+                <Alert variant="success" dismissible onClose={() => setSuccessMsg("")}>
+                    {successMsg}
+                </Alert>
+            )}
 
             {requests.length === 0 && !errorMsg && (
                 <Card className="text-center py-5">
@@ -81,80 +170,120 @@ export default function PendingRequests() {
                 </Card>
             )}
 
-            {requests.map((req) => (
-                <Card key={req.bookingRequestId} className="mb-3 shadow-sm">
-                    <Card.Body>
-                        <div className="d-flex justify-content-between align-items-start mb-2">
-                            <div>
-                                <h5 className="mb-1">{req.facility.name}</h5>
-                                <div className="text-muted small">
-                                    Request #{req.bookingRequestId} · submitted{" "}
-                                    {formatTimeAgo(req.createdAt)}
-                                </div>
-                            </div>
-                            <Badge bg="warning" text="dark">
-                                Pending
-                            </Badge>
-                        </div>
-
-                        <hr />
-
-                        <div className="row">
-                            <div className="col-md-6 mb-3">
-                                <div className="text-muted small">Requested by</div>
+            {requests.map((req) => {
+                const isProcessing = processingId === req.bookingRequestId;
+                return (
+                    <Card key={req.bookingRequestId} className="mb-3 shadow-sm">
+                        <Card.Body>
+                            <div className="d-flex justify-content-between align-items-start mb-2">
                                 <div>
-                                    <strong>
-                                        {req.member.firstName} {req.member.lastName}
-                                    </strong>
+                                    <h5 className="mb-1">{req.facility.name}</h5>
+                                    <div className="text-muted small">
+                                        Request #{req.bookingRequestId} · submitted{" "}
+                                        {formatTimeAgo(req.createdAt)}
+                                    </div>
                                 </div>
-                                <div className="small text-muted">{req.member.email}</div>
+                                <Badge bg="warning" text="dark">
+                                    Pending
+                                </Badge>
                             </div>
 
-                            <div className="col-md-6 mb-3">
-                                <div className="text-muted small">Booking time</div>
-                                <div>
-                                    <strong>{req.bookingDate}</strong>
+                            <hr />
+
+                            <div className="row">
+                                <div className="col-md-6 mb-3">
+                                    <div className="text-muted small">Requested by</div>
+                                    <div>
+                                        <strong>
+                                            {req.member.firstName} {req.member.lastName}
+                                        </strong>
+                                    </div>
+                                    <div className="small text-muted">{req.member.email}</div>
                                 </div>
-                                <div>
-                                    {req.startTime} – {req.endTime}
+
+                                <div className="col-md-6 mb-3">
+                                    <div className="text-muted small">Booking time</div>
+                                    <div>
+                                        <strong>{req.bookingDate}</strong>
+                                    </div>
+                                    <div>
+                                        {req.startTime} – {req.endTime}
+                                    </div>
+                                </div>
+
+                                <div className="col-12">
+                                    <div className="text-muted small">Intended activity</div>
+                                    <div>{req.intendedActivity || "(not specified)"}</div>
                                 </div>
                             </div>
 
-                            <div className="col-12">
-                                <div className="text-muted small">Intended activity</div>
-                                <div>{req.intendedActivity || "(not specified)"}</div>
+                            <div className="mt-3 d-flex gap-2">
+                                <Button
+                                    variant="success"
+                                    size="sm"
+                                    disabled={isProcessing}
+                                    onClick={() => handleApprove(req.bookingRequestId)}
+                                >
+                                    {isProcessing ? "Processing..." : "Approve"}
+                                </Button>
+                                <Button
+                                    variant="danger"
+                                    size="sm"
+                                    disabled={isProcessing}
+                                    onClick={() => openRejectModal(req.bookingRequestId)}
+                                >
+                                    Reject
+                                </Button>
+                                <Button
+                                    variant="outline-secondary"
+                                    size="sm"
+                                    disabled
+                                    title="Coming in Stage 5"
+                                >
+                                    Suggest Alternative
+                                </Button>
                             </div>
-                        </div>
-
-                        <div className="mt-3 d-flex gap-2">
-                            <Button
-                                variant="success"
-                                size="sm"
-                                disabled
-                                title="Coming in Stage 3"
-                            >
-                                Approve
-                            </Button>
-                            <Button
-                                variant="danger"
-                                size="sm"
-                                disabled
-                                title="Coming in Stage 3"
-                            >
-                                Reject
-                            </Button>
-                            <Button
-                                variant="outline-secondary"
-                                size="sm"
-                                disabled
-                                title="Coming in Stage 5"
-                            >
-                                Suggest Alternative
-                            </Button>
-                        </div>
-                    </Card.Body>
-                </Card>
-            ))}
+                        </Card.Body>
+                    </Card>
+                );
+            })}
+            
+            <Modal
+                show={rejectModalOpen}
+                onHide={() => setRejectModalOpen(false)}
+                centered
+            >
+                <Modal.Header closeButton>
+                    <Modal.Title>Reject Booking Request</Modal.Title>
+                </Modal.Header>
+                <Modal.Body>
+                    <Form.Group>
+                        <Form.Label>Reason for rejection (optional)</Form.Label>
+                        <Form.Control
+                            as="textarea"
+                            rows={3}
+                            placeholder="e.g. Court reserved for maintenance on that day"
+                            value={rejectReason}
+                            onChange={(e) => setRejectReason(e.target.value)}
+                            maxLength={500}
+                        />
+                        <Form.Text className="text-muted">
+                            This reason will be sent to the member as a notification.
+                        </Form.Text>
+                    </Form.Group>
+                </Modal.Body>
+                <Modal.Footer>
+                    <Button
+                        variant="secondary"
+                        onClick={() => setRejectModalOpen(false)}
+                    >
+                        Cancel
+                    </Button>
+                    <Button variant="danger" onClick={handleReject}>
+                        Confirm Reject
+                    </Button>
+                </Modal.Footer>
+            </Modal>
         </div>
     );
 }
