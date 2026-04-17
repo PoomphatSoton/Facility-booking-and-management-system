@@ -231,3 +231,28 @@ export interface PendingRequestsResponse {
   data: PendingBookingRequest[];
   message?: string;
 }
+
+// ==================== Approve / Reject ====================
+
+export interface ApproveResponse {
+  status: "ok" | "error";
+  data?: {
+    bookingRequestId: number;
+    bookingId: number;
+    bookingStatus: string;
+    message: string;
+  };
+  message?: string;
+  code?: string;
+  conflicts?: string[];
+}
+
+export interface RejectResponse {
+  status: "ok" | "error";
+  data?: {
+    bookingRequestId: number;
+    message: string;
+  };
+  message?: string;
+  code?: string;
+}
