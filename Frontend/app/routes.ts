@@ -17,6 +17,8 @@ export default [
   route("partner-requests", "partner-matching/partner-requests.tsx"),
   route("find-partners/:partnerId", "partner-matching/partner-profile.tsx"),
   route("booking/new/:facilityId", "booking/new-booking.tsx"),
+  route("booking/my", "booking/my-bookings.tsx"),
+  route("booking/notifications", "booking/notifications.tsx"),
   route("staff/pending", "staff/pending-requests.tsx"),
   layout("auth/layout.tsx", [
     route("auth/login", "auth/login.tsx"),
