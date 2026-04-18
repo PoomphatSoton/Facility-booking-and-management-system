@@ -157,7 +157,9 @@ export default function NewBooking() {
                         onClick={() => setSelectedSlot(slot)}
                     >
                         {slot.startTime} - {slot.endTime}
-                        {isFull && " (Full)"}
+                                {isFull
+                                    ? " (Full)"
+                                    : ` (${facilityData.maxPeople - slot.occupied}/${facilityData.maxPeople} spots left)`}
                         </Button>
                     );
                     })}

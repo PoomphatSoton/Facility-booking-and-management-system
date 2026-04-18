@@ -528,10 +528,274 @@ const rejectRequest = async (bookingRequestId, userId, reason) => {
     };
 };
 
+/**
+ * Retrieve all reservations for a specific member
+ * @param {string} userId
+ * @returns {Object} { upcoming: [], history: [], pendingRequests: [] }
+ */
+const getMyBookings = async (userId) => {
+    // 1. find member_id
+    const memberResult = await pool.query(
+        `SELECT member_id FROM public.members WHERE user_id = $1`,
+        [userId]
+    );
+    if (memberResult.rows.length === 0) {
+        throw new Error('MEMBER_NOT_FOUND');
+    }
+    const memberId = memberResult.rows[0].member_id;
+
+    // 2. search all pending booking
+    const pendingResult = await pool.query(
+        `
+    SELECT
+      br.booking_request_id,
+      br.request_status,
+      br.created_at,
+      bd.facility_id,
+      f.name AS facility_name,
+      bd.date,
+      TO_CHAR(bd.start_time, 'HH24:MI') AS start_time,
+      TO_CHAR(bd.end_time, 'HH24:MI') AS end_time,
+      bd.intended_activity
+    FROM public.booking_requests br
+    JOIN public.booking_details bd ON br.booking_detail_id = bd.booking_detail_id
+    JOIN public.facilities f ON bd.facility_id = f.facility_id
+    WHERE bd.member_id = $1
+      AND br.request_status = 'pending'
+    ORDER BY bd.date ASC, bd.start_time ASC
+    `,
+        [memberId]
+    );
+
+    // 3. All booking(upcoming + completed + cancelled)
+    const bookingsResult = await pool.query(
+        `
+    SELECT
+      b.booking_id,
+      b.booking_status,
+      b.created_at,
+      br.booking_request_id,
+      bd.facility_id,
+      f.name AS facility_name,
+      bd.date,
+      TO_CHAR(bd.start_time, 'HH24:MI') AS start_time,
+      TO_CHAR(bd.end_time, 'HH24:MI') AS end_time,
+      bd.intended_activity
+    FROM public.bookings b
+    JOIN public.booking_details bd ON b.booking_detail_id = bd.booking_detail_id
+    JOIN public.facilities f ON bd.facility_id = f.facility_id
+    LEFT JOIN public.booking_requests br ON br.booking_detail_id = bd.booking_detail_id
+    WHERE bd.member_id = $1
+    ORDER BY bd.date DESC, bd.start_time DESC
+    `,
+        [memberId]
+    );
+
+    // 4. rejected booking
+    const rejectedResult = await pool.query(
+        `
+    SELECT
+      br.booking_request_id,
+      br.request_status,
+      br.created_at,
+      bd.facility_id,
+      f.name AS facility_name,
+      bd.date,
+      TO_CHAR(bd.start_time, 'HH24:MI') AS start_time,
+      TO_CHAR(bd.end_time, 'HH24:MI') AS end_time,
+      bd.intended_activity
+    FROM public.booking_requests br
+    JOIN public.booking_details bd ON br.booking_detail_id = bd.booking_detail_id
+    JOIN public.facilities f ON bd.facility_id = f.facility_id
+    WHERE bd.member_id = $1
+      AND br.request_status = 'rejected'
+    ORDER BY br.created_at DESC
+    `,
+        [memberId]
+    );
+
+    const upcoming = [];
+    const history = [];
+
+    for (const row of bookingsResult.rows) {
+        const item = {
+            bookingId: row.booking_id,
+            bookingRequestId: row.booking_request_id,
+            bookingStatus: row.booking_status,
+            createdAt: row.created_at,
+            facilityId: row.facility_id,
+            facilityName: row.facility_name,
+            bookingDate: row.date.toISOString().slice(0, 10),
+            startTime: row.start_time,
+            endTime: row.end_time,
+            intendedActivity: row.intended_activity,
+        };
+
+        if (row.booking_status === 'upcoming') {
+            upcoming.push(item);
+        } else {
+            history.push(item);
+        }
+    }
+
+    const pendingRequests = pendingResult.rows.map((row) => ({
+        bookingRequestId: row.booking_request_id,
+        requestStatus: row.request_status,
+        createdAt: row.created_at,
+        facilityId: row.facility_id,
+        facilityName: row.facility_name,
+        bookingDate: row.date.toISOString().slice(0, 10),
+        startTime: row.start_time,
+        endTime: row.end_time,
+        intendedActivity: row.intended_activity,
+    }));
+
+    const rejected = rejectedResult.rows.map((row) => ({
+        bookingRequestId: row.booking_request_id,
+        requestStatus: row.request_status,
+        createdAt: row.created_at,
+        facilityId: row.facility_id,
+        facilityName: row.facility_name,
+        bookingDate: row.date.toISOString().slice(0, 10),
+        startTime: row.start_time,
+        endTime: row.end_time,
+        intendedActivity: row.intended_activity,
+    }));
+
+    return { upcoming, history, pendingRequests, rejected };
+};
+
+/**
+ * Member cancels booking
+ * @param {number} bookingId
+ * @param {string} userId
+ */
+const cancelBooking = async (bookingId, userId) => {
+    // 1. find member_id
+    const memberResult = await pool.query(
+        `SELECT member_id FROM public.members WHERE user_id = $1`,
+        [userId]
+    );
+    if (memberResult.rows.length === 0) {
+        throw new Error('MEMBER_NOT_FOUND');
+    }
+    const memberId = memberResult.rows[0].member_id;
+
+    // 2. is upcoming?
+    const bookingResult = await pool.query(
+        `
+    SELECT b.booking_id, b.booking_status, bd.member_id,
+           bd.facility_id, f.name AS facility_name,
+           bd.date, TO_CHAR(bd.start_time, 'HH24:MI') AS start_time,
+           TO_CHAR(bd.end_time, 'HH24:MI') AS end_time
+    FROM public.bookings b
+    JOIN public.booking_details bd ON b.booking_detail_id = bd.booking_detail_id
+    JOIN public.facilities f ON bd.facility_id = f.facility_id
+    WHERE b.booking_id = $1
+    `,
+        [bookingId]
+    );
+
+    if (bookingResult.rows.length === 0) {
+        throw new Error('BOOKING_NOT_FOUND');
+    }
+
+    const booking = bookingResult.rows[0];
+
+    if (booking.member_id !== memberId) {
+        throw new Error('NOT_YOUR_BOOKING');
+    }
+
+    if (booking.booking_status !== 'upcoming') {
+        throw new Error('CANNOT_CANCEL');
+    }
+
+    // 3. update cancelled
+    await pool.query(
+        `UPDATE public.bookings SET booking_status = 'cancelled' WHERE booking_id = $1`,
+        [bookingId]
+    );
+
+    // 4. notification
+    await pool.query(
+        `INSERT INTO public.notification_histories (user_id, message, type)
+     VALUES ($1, $2, 'booking_cancelled')`,
+        [
+            userId,
+            `You have cancelled your booking for ${booking.facility_name} on ${booking.date.toISOString().slice(0, 10)} (${booking.start_time}-${booking.end_time}).`,
+        ]
+    );
+
+    return {
+        bookingId,
+        message: `Booking cancelled for ${booking.facility_name}`,
+    };
+};
+
+/**
+ * Retrieve the notification list for a specific user
+ * @param {string} userId
+ * @returns {Array}
+ */
+const getNotifications = async (userId) => {
+    const result = await pool.query(
+        `
+    SELECT notif_id, message, is_read, type, sending_at
+    FROM public.notification_histories
+    WHERE user_id = $1
+    ORDER BY sending_at DESC
+    LIMIT 50
+    `,
+        [userId]
+    );
+
+    return result.rows.map((row) => ({
+        notifId: row.notif_id,
+        message: row.message,
+        isRead: row.is_read,
+        type: row.type,
+        sendingAt: row.sending_at,
+    }));
+};
+
+/**
+ * Mark notification as read
+ * @param {number} notifId
+ * @param {string} userId
+ */
+const markNotificationRead = async (notifId, userId) => {
+    await pool.query(
+        `UPDATE public.notification_histories
+     SET is_read = TRUE
+     WHERE notif_id = $1 AND user_id = $2`,
+        [notifId, userId]
+    );
+    return { notifId, isRead: true };
+};
+
+/**
+ * Mark all notifications as read
+ * @param {string} userId
+ */
+const markAllNotificationsRead = async (userId) => {
+    await pool.query(
+        `UPDATE public.notification_histories
+     SET is_read = TRUE
+     WHERE user_id = $1 AND is_read = FALSE`,
+        [userId]
+    );
+    return { message: 'all notifications marked as read' };
+};
+
 module.exports = {
     getAvailableSlots,
     submitBookingRequest,
     getPendingRequestsForStaff,
     approveRequest,
     rejectRequest,
+    getMyBookings,
+    cancelBooking,
+    getNotifications,
+    markNotificationRead,
+    markAllNotificationsRead,
 };

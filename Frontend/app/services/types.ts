@@ -256,3 +256,55 @@ export interface RejectResponse {
   message?: string;
   code?: string;
 }
+
+// ==================== My Bookings ====================
+
+export interface MyBookingItem {
+  bookingId?: number;
+  bookingRequestId?: number;
+  bookingStatus?: string;
+  requestStatus?: string;
+  createdAt: string;
+  facilityId: number;
+  facilityName: string;
+  bookingDate: string;
+  startTime: string;
+  endTime: string;
+  intendedActivity: string | null;
+}
+
+export interface MyBookingsData {
+  upcoming: MyBookingItem[];
+  history: MyBookingItem[];
+  pendingRequests: MyBookingItem[];
+  rejected: MyBookingItem[];
+}
+
+export interface MyBookingsResponse {
+  status: "ok" | "error";
+  data: MyBookingsData;
+  message?: string;
+}
+
+export interface CancelBookingResponse {
+  status: "ok" | "error";
+  data?: { bookingId: number; message: string };
+  message?: string;
+  code?: string;
+}
+
+// ==================== Notifications ====================
+
+export interface NotificationItem {
+  notifId: number;
+  message: string;
+  isRead: boolean;
+  type: string | null;
+  sendingAt: string;
+}
+
+export interface NotificationsResponse {
+  status: "ok" | "error";
+  data: NotificationItem[];
+  message?: string;
+}

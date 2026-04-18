@@ -44,4 +44,41 @@ router.post(
     bookingController.rejectRequest
 );
 
+// Members view their own reservations
+router.get(
+    '/my',
+    requireAuth,
+    requireRole(['member']),
+    bookingController.getMyBookings
+);
+
+// Member cancels reservation
+router.post(
+    '/:bookingId/cancel',
+    requireAuth,
+    requireRole(['member']),
+    bookingController.cancelBooking
+);
+
+// View notifications
+router.get(
+    '/notifications',
+    requireAuth,
+    bookingController.getNotifications
+);
+
+// Mark a single notification as read
+router.post(
+    '/notifications/:notifId/read',
+    requireAuth,
+    bookingController.markNotificationRead
+);
+
+// Mark all notifications as read
+router.post(
+    '/notifications/read-all',
+    requireAuth,
+    bookingController.markAllNotificationsRead
+);
+
 module.exports = router;

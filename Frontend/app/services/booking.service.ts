@@ -6,6 +6,9 @@ import type {
     PendingRequestsResponse,
     ApproveResponse,
     RejectResponse,
+    MyBookingsResponse,
+    CancelBookingResponse,
+    NotificationsResponse,
 } from "./types";
 
 export const bookingService = {
@@ -54,6 +57,36 @@ export const bookingService = {
             `/bookings/requests/${requestId}/reject`,
             { reason }
         );
+        return response.data;
+    },
+
+    async getMyBookings(): Promise<MyBookingsResponse> {
+        const response = await api.get<MyBookingsResponse>(`/bookings/my`);
+        return response.data;
+    },
+
+    async cancelBooking(bookingId: number): Promise<CancelBookingResponse> {
+        const response = await api.post<CancelBookingResponse>(
+            `/bookings/${bookingId}/cancel`,
+            {}
+        );
+        return response.data;
+    },
+
+    async getNotifications(): Promise<NotificationsResponse> {
+        const response = await api.get<NotificationsResponse>(
+            `/bookings/notifications`
+        );
+        return response.data;
+    },
+
+    async markNotificationRead(notifId: number): Promise<any> {
+        const response = await api.post(`/bookings/notifications/${notifId}/read`);
+        return response.data;
+    },
+
+    async markAllNotificationsRead(): Promise<any> {
+        const response = await api.post(`/bookings/notifications/read-all`);
         return response.data;
     },
 };
