@@ -1,3 +1,6 @@
+const pg = require('pg');
+pg.types.setTypeParser(1082, (val) => val);
+
 const { Pool } = require('pg');
 
 const sslConfig =

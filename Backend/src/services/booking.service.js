@@ -62,13 +62,13 @@ const getAvailableSlots = async (facilityId, daysAhead = 7) => {
 
     const occupancyMap = new Map();
     for (const row of occupancyResult.rows) {
-        const key = `${row.date.toISOString().slice(0, 10)}_${row.start_time}_${row.end_time}`;
+        const key = `${row.date}_${row.start_time}_${row.end_time}`;
         occupancyMap.set(key, parseInt(row.occupied_count, 10));
     }
 
     // 4. Mark whether each time slot is available
     const enrichedSlots = slots.map((slot) => {
-        const dateStr = slot.slot_date.toISOString().slice(0, 10);
+        const dateStr = slot.slot_date;
         const key = `${dateStr}_${slot.start_time}_${slot.end_time}`;
         const occupied = occupancyMap.get(key) || 0;
         return {
@@ -240,7 +240,7 @@ const getPendingRequestsForStaff = async (userId) => {
             facilityId: row.facility_id,
             name: row.facility_name,
         },
-        bookingDate: row.date.toISOString().slice(0, 10),
+        bookingDate: row.date,
         startTime: row.start_time,
         endTime: row.end_time,
         intendedActivity: row.intended_activity,
@@ -418,7 +418,7 @@ const approveRequest = async (bookingRequestId, userId) => {
        VALUES ($1, $2, 'booking_approved')`,
             [
                 memberUserId,
-                `Your booking for ${requestDetail.facilityName} on ${requestDetail.date.toISOString().slice(0, 10)} (${requestDetail.startTime}-${requestDetail.endTime}) has been approved.`,
+                `Your booking for ${requestDetail.facilityName} on ${requestDetail.date} (${requestDetail.startTime}-${requestDetail.endTime}) has been approved.`,
             ]
         );
     }
@@ -513,8 +513,8 @@ const rejectRequest = async (bookingRequestId, userId, reason) => {
     if (memberUserResult.rows.length > 0) {
         const memberUserId = memberUserResult.rows[0].user_id;
         const rejectMessage = reason
-            ? `Your booking for ${detail.facility_name} on ${detail.date.toISOString().slice(0, 10)} has been rejected. Reason: ${reason}`
-            : `Your booking for ${detail.facility_name} on ${detail.date.toISOString().slice(0, 10)} has been rejected.`;
+            ? `Your booking for ${detail.facility_name} on ${detail.date} has been rejected. Reason: ${reason}`
+            : `Your booking for ${detail.facility_name} on ${detail.date} has been rejected.`;
         await pool.query(
             `INSERT INTO public.notification_histories (user_id, message, type)
        VALUES ($1, $2, 'booking_rejected')`,
@@ -625,7 +625,7 @@ const getMyBookings = async (userId) => {
             createdAt: row.created_at,
             facilityId: row.facility_id,
             facilityName: row.facility_name,
-            bookingDate: row.date.toISOString().slice(0, 10),
+            bookingDate: row.date,
             startTime: row.start_time,
             endTime: row.end_time,
             intendedActivity: row.intended_activity,
@@ -644,7 +644,7 @@ const getMyBookings = async (userId) => {
         createdAt: row.created_at,
         facilityId: row.facility_id,
         facilityName: row.facility_name,
-        bookingDate: row.date.toISOString().slice(0, 10),
+        bookingDate: row.date,
         startTime: row.start_time,
         endTime: row.end_time,
         intendedActivity: row.intended_activity,
@@ -656,7 +656,7 @@ const getMyBookings = async (userId) => {
         createdAt: row.created_at,
         facilityId: row.facility_id,
         facilityName: row.facility_name,
-        bookingDate: row.date.toISOString().slice(0, 10),
+        bookingDate: row.date,
         startTime: row.start_time,
         endTime: row.end_time,
         intendedActivity: row.intended_activity,
@@ -722,7 +722,7 @@ const cancelBooking = async (bookingId, userId) => {
      VALUES ($1, $2, 'booking_cancelled')`,
         [
             userId,
-            `You have cancelled your booking for ${booking.facility_name} on ${booking.date.toISOString().slice(0, 10)} (${booking.start_time}-${booking.end_time}).`,
+            `You have cancelled your booking for ${booking.facility_name} on ${booking.date} (${booking.start_time}-${booking.end_time}).`,
         ]
     );
 
