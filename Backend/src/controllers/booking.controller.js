@@ -182,10 +182,91 @@ const rejectRequest = async (req, res) => {
     }
 };
 
+const getMyBookings = async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const result = await bookingService.getMyBookings(userId);
+        return res.status(200).json({ status: 'ok', data: result });
+    } catch (error) {
+        if (error.message === 'MEMBER_NOT_FOUND') {
+            return res.status(404).json({ status: 'error', message: 'member record not found' });
+        }
+        console.error('getMyBookings error:', error);
+        return res.status(500).json({ status: 'error', message: 'internal server error' });
+    }
+};
+
+const cancelBooking = async (req, res) => {
+    try {
+        const bookingId = parseInt(req.params.bookingId, 10);
+        if (isNaN(bookingId)) {
+            return res.status(400).json({ status: 'error', message: 'invalid booking id' });
+        }
+        const userId = req.user.id;
+        const result = await bookingService.cancelBooking(bookingId, userId);
+        return res.status(200).json({ status: 'ok', data: result });
+    } catch (error) {
+        const errorMap = {
+            MEMBER_NOT_FOUND: { s: 404, m: 'member record not found' },
+            BOOKING_NOT_FOUND: { s: 404, m: 'booking not found' },
+            NOT_YOUR_BOOKING: { s: 403, m: 'this booking does not belong to you' },
+            CANNOT_CANCEL: { s: 400, m: 'only upcoming bookings can be cancelled' },
+        };
+        const mapped = errorMap[error.message];
+        if (mapped) {
+            return res.status(mapped.s).json({ status: 'error', code: error.message, message: mapped.m });
+        }
+        console.error('cancelBooking error:', error);
+        return res.status(500).json({ status: 'error', message: 'internal server error' });
+    }
+};
+
+const getNotifications = async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const result = await bookingService.getNotifications(userId);
+        return res.status(200).json({ status: 'ok', data: result });
+    } catch (error) {
+        console.error('getNotifications error:', error);
+        return res.status(500).json({ status: 'error', message: 'internal server error' });
+    }
+};
+
+const markNotificationRead = async (req, res) => {
+    try {
+        const notifId = parseInt(req.params.notifId, 10);
+        if (isNaN(notifId)) {
+            return res.status(400).json({ status: 'error', message: 'invalid notification id' });
+        }
+        const userId = req.user.id;
+        const result = await bookingService.markNotificationRead(notifId, userId);
+        return res.status(200).json({ status: 'ok', data: result });
+    } catch (error) {
+        console.error('markNotificationRead error:', error);
+        return res.status(500).json({ status: 'error', message: 'internal server error' });
+    }
+};
+
+const markAllNotificationsRead = async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const result = await bookingService.markAllNotificationsRead(userId);
+        return res.status(200).json({ status: 'ok', data: result });
+    } catch (error) {
+        console.error('markAllNotificationsRead error:', error);
+        return res.status(500).json({ status: 'error', message: 'internal server error' });
+    }
+};
+
 module.exports = {
     getAvailableSlots,
     submitBookingRequest,
     getPendingRequests,
     approveRequest,
     rejectRequest,
+    getMyBookings,
+    cancelBooking,
+    getNotifications,
+    markNotificationRead,
+    markAllNotificationsRead,
 };
