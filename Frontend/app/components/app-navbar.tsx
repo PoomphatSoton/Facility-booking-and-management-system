@@ -26,6 +26,18 @@ export default function AppNavbar() {
             <Nav.Link as={Link} to="/">
               Home
             </Nav.Link>
+            <Nav.Link as={Link} to="/booking/my">
+              My Bookings
+            </Nav.Link>
+            <Nav.Link as={Link} to="/booking/notifications">
+              Notifications
+            </Nav.Link>
+            <Nav.Link as={Link} to="/staff/pending">
+              Staff Dashboard
+            </Nav.Link>
+            <Nav.Link as={Link} to="/staff/upcoming">
+              Manage Sessions
+            </Nav.Link>
             <Button variant="outline-danger" onClick={handleLogout}>
               Logout
             </Button>
