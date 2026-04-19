@@ -608,7 +608,7 @@ const getMyBookings = async (userId) => {
     JOIN public.booking_details bd ON br.booking_detail_id = bd.booking_detail_id
     JOIN public.facilities f ON bd.facility_id = f.facility_id
     WHERE bd.member_id = $1
-      AND br.request_status = 'rejected'
+      AND br.request_status IN ('rejected', 'cancelled')
     ORDER BY br.created_at DESC
     `,
         [memberId]
@@ -933,6 +933,61 @@ const completeBooking = async (bookingId, userId) => {
     };
 };
 
+/**
+ * Member withdraws a pending reservation request
+ * @param {number} bookingRequestId
+ * @param {string} userId
+ */
+const cancelPendingRequest = async (bookingRequestId, userId) => {
+    const memberResult = await pool.query(
+        `SELECT member_id FROM public.members WHERE user_id = $1`,
+        [userId]
+    );
+    if (memberResult.rows.length === 0) {
+        throw new Error('MEMBER_NOT_FOUND');
+    }
+    const memberId = memberResult.rows[0].member_id;
+
+    const requestResult = await pool.query(
+        `
+    SELECT br.booking_request_id, br.request_status, bd.member_id,
+           bd.facility_id, f.name AS facility_name,
+           TO_CHAR(bd.date, 'YYYY-MM-DD') AS date,
+           TO_CHAR(bd.start_time, 'HH24:MI') AS start_time,
+           TO_CHAR(bd.end_time, 'HH24:MI') AS end_time
+    FROM public.booking_requests br
+    JOIN public.booking_details bd ON br.booking_detail_id = bd.booking_detail_id
+    JOIN public.facilities f ON bd.facility_id = f.facility_id
+    WHERE br.booking_request_id = $1
+    `,
+        [bookingRequestId]
+    );
+
+    if (requestResult.rows.length === 0) {
+        throw new Error('REQUEST_NOT_FOUND');
+    }
+
+    const request = requestResult.rows[0];
+
+    if (request.member_id !== memberId) {
+        throw new Error('NOT_YOUR_REQUEST');
+    }
+
+    if (request.request_status !== 'pending') {
+        throw new Error('REQUEST_NOT_PENDING');
+    }
+
+    await pool.query(
+        `UPDATE public.booking_requests SET request_status = 'cancelled' WHERE booking_request_id = $1`,
+        [bookingRequestId]
+    );
+
+    return {
+        bookingRequestId,
+        message: `Request cancelled for ${request.facility_name} on ${request.date}`,
+    };
+};
+
 module.exports = {
     getAvailableSlots,
     submitBookingRequest,
@@ -946,4 +1001,5 @@ module.exports = {
     markAllNotificationsRead,
     getUpcomingBookingsForStaff,
     completeBooking,
+    cancelPendingRequest,
 };

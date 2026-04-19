@@ -97,4 +97,12 @@ router.post(
     bookingController.completeBooking
 );
 
+// Member cancels a pending request
+router.post(
+    '/requests/:requestId/cancel',
+    requireAuth,
+    requireRole(['member']),
+    bookingController.cancelPendingRequest
+);
+
 module.exports = router;
