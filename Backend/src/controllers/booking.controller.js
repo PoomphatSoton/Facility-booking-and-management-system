@@ -297,6 +297,31 @@ const completeBooking = async (req, res) => {
     }
 };
 
+const cancelPendingRequest = async (req, res) => {
+    try {
+        const bookingRequestId = parseInt(req.params.requestId, 10);
+        if (isNaN(bookingRequestId)) {
+            return res.status(400).json({ status: 'error', message: 'invalid request id' });
+        }
+        const userId = req.user.id;
+        const result = await bookingService.cancelPendingRequest(bookingRequestId, userId);
+        return res.status(200).json({ status: 'ok', data: result });
+    } catch (error) {
+        const errorMap = {
+            MEMBER_NOT_FOUND: { s: 404, m: 'member record not found' },
+            REQUEST_NOT_FOUND: { s: 404, m: 'request not found' },
+            NOT_YOUR_REQUEST: { s: 403, m: 'this request does not belong to you' },
+            REQUEST_NOT_PENDING: { s: 400, m: 'only pending requests can be cancelled' },
+        };
+        const mapped = errorMap[error.message];
+        if (mapped) {
+            return res.status(mapped.s).json({ status: 'error', code: error.message, message: mapped.m });
+        }
+        console.error('cancelPendingRequest error:', error);
+        return res.status(500).json({ status: 'error', message: 'internal server error' });
+    }
+};
+
 module.exports = {
     getAvailableSlots,
     submitBookingRequest,
@@ -310,4 +335,5 @@ module.exports = {
     markAllNotificationsRead,
     getUpcomingBookings,
     completeBooking,
+    cancelPendingRequest,
 };

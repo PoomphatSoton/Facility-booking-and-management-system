@@ -106,4 +106,12 @@ export const bookingService = {
         );
         return response.data;
     },
+
+    async cancelPendingRequest(requestId: number): Promise<CancelBookingResponse> {
+        const response = await api.post<CancelBookingResponse>(
+            `/bookings/requests/${requestId}/cancel`,
+            {}
+        );
+        return response.data;
+    },
 };

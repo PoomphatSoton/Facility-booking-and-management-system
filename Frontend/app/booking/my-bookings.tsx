@@ -64,6 +64,30 @@ export default function MyBookings() {
         }
     };
 
+    const handleCancelPending = async (requestId: number) => {
+        const confirmed = window.confirm(
+            "Are you sure you want to withdraw this pending request?"
+        );
+        if (!confirmed) return;
+
+        try {
+            setCancellingId(requestId);
+            setErrorMsg("");
+            setSuccessMsg("");
+            const response = await bookingService.cancelPendingRequest(requestId);
+            if (response.status === "ok") {
+                setSuccessMsg(response.data?.message || "Request withdrawn");
+                await loadBookings();
+            } else {
+                setErrorMsg(response.message || "Failed to withdraw request");
+            }
+        } catch (err: any) {
+            setErrorMsg(err.message || "Failed to withdraw request");
+        } finally {
+            setCancellingId(null);
+        }
+    };
+
     const statusBadge = (status: string) => {
         const variants: Record<string, string> = {
             upcoming: "primary",
@@ -113,6 +137,20 @@ export default function MyBookings() {
                             {cancellingId === item.bookingId
                                 ? "Cancelling..."
                                 : "Cancel Booking"}
+                        </Button>
+                    </div>
+                )}
+                {item.requestStatus === "pending" && item.bookingRequestId && (
+                    <div className="mt-3">
+                        <Button
+                            variant="outline-danger"
+                            size="sm"
+                            disabled={cancellingId === item.bookingRequestId}
+                            onClick={() => handleCancelPending(item.bookingRequestId!)}
+                        >
+                            {cancellingId === item.bookingRequestId
+                                ? "Cancelling..."
+                                : "Withdraw Request"}
                         </Button>
                     </div>
                 )}
