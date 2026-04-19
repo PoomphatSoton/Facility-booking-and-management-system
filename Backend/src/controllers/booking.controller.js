@@ -258,6 +258,45 @@ const markAllNotificationsRead = async (req, res) => {
     }
 };
 
+const getUpcomingBookings = async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const result = await bookingService.getUpcomingBookingsForStaff(userId);
+        return res.status(200).json({ status: 'ok', data: result });
+    } catch (error) {
+        if (error.message === 'STAFF_NOT_FOUND') {
+            return res.status(404).json({ status: 'error', message: 'staff record not found' });
+        }
+        console.error('getUpcomingBookings error:', error);
+        return res.status(500).json({ status: 'error', message: 'internal server error' });
+    }
+};
+
+const completeBooking = async (req, res) => {
+    try {
+        const bookingId = parseInt(req.params.bookingId, 10);
+        if (isNaN(bookingId)) {
+            return res.status(400).json({ status: 'error', message: 'invalid booking id' });
+        }
+        const userId = req.user.id;
+        const result = await bookingService.completeBooking(bookingId, userId);
+        return res.status(200).json({ status: 'ok', data: result });
+    } catch (error) {
+        const errorMap = {
+            STAFF_NOT_FOUND: { s: 404, m: 'staff record not found' },
+            BOOKING_NOT_FOUND: { s: 404, m: 'booking not found' },
+            BOOKING_NOT_UPCOMING: { s: 400, m: 'only upcoming bookings can be completed' },
+            STAFF_NOT_AUTHORIZED: { s: 403, m: 'you are not authorized for this facility' },
+        };
+        const mapped = errorMap[error.message];
+        if (mapped) {
+            return res.status(mapped.s).json({ status: 'error', code: error.message, message: mapped.m });
+        }
+        console.error('completeBooking error:', error);
+        return res.status(500).json({ status: 'error', message: 'internal server error' });
+    }
+};
+
 module.exports = {
     getAvailableSlots,
     submitBookingRequest,
@@ -269,4 +308,6 @@ module.exports = {
     getNotifications,
     markNotificationRead,
     markAllNotificationsRead,
+    getUpcomingBookings,
+    completeBooking,
 };

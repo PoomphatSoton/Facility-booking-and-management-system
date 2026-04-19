@@ -308,3 +308,30 @@ export interface NotificationsResponse {
   data: NotificationItem[];
   message?: string;
 }
+
+// ==================== Staff Upcoming / Complete ====================
+
+export interface UpcomingBookingForStaff {
+  bookingId: number;
+  bookingStatus: string;
+  createdAt: string;
+  facility: PendingRequestFacility;
+  bookingDate: string;
+  startTime: string;
+  endTime: string;
+  intendedActivity: string | null;
+  member: PendingRequestMember;
+}
+
+export interface UpcomingBookingsForStaffResponse {
+  status: "ok" | "error";
+  data: UpcomingBookingForStaff[];
+  message?: string;
+}
+
+export interface CompleteBookingResponse {
+  status: "ok" | "error";
+  data?: { bookingId: number; message: string };
+  message?: string;
+  code?: string;
+}
