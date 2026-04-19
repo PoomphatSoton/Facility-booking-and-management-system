@@ -9,6 +9,8 @@ import type {
     MyBookingsResponse,
     CancelBookingResponse,
     NotificationsResponse,
+    UpcomingBookingsForStaffResponse,
+    CompleteBookingResponse,
 } from "./types";
 
 export const bookingService = {
@@ -87,6 +89,21 @@ export const bookingService = {
 
     async markAllNotificationsRead(): Promise<any> {
         const response = await api.post(`/bookings/notifications/read-all`);
+        return response.data;
+    },
+
+    async getUpcomingBookingsForStaff(): Promise<UpcomingBookingsForStaffResponse> {
+        const response = await api.get<UpcomingBookingsForStaffResponse>(
+            `/bookings/staff/upcoming`
+        );
+        return response.data;
+    },
+
+    async completeBooking(bookingId: number): Promise<CompleteBookingResponse> {
+        const response = await api.post<CompleteBookingResponse>(
+            `/bookings/${bookingId}/complete`,
+            {}
+        );
         return response.data;
     },
 };

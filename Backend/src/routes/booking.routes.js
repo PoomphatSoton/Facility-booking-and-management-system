@@ -81,4 +81,20 @@ router.post(
     bookingController.markAllNotificationsRead
 );
 
+// Staff view upcoming bookings
+router.get(
+    '/staff/upcoming',
+    requireAuth,
+    requireRole(['staff']),
+    bookingController.getUpcomingBookings
+);
+
+// Employee confirmation completed
+router.post(
+    '/:bookingId/complete',
+    requireAuth,
+    requireRole(['staff']),
+    bookingController.completeBooking
+);
+
 module.exports = router;

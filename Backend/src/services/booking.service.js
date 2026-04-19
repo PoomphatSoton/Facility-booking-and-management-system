@@ -787,6 +787,152 @@ const markAllNotificationsRead = async (userId) => {
     return { message: 'all notifications marked as read' };
 };
 
+/**
+ * Retrieve all upcoming reservations for the venues managed by a specific staff
+ * @param {string} userId
+ * @returns {Array}
+ */
+const getUpcomingBookingsForStaff = async (userId) => {
+    const staffResult = await pool.query(
+        `SELECT staff_id FROM public.staff WHERE user_id = $1`,
+        [userId]
+    );
+    if (staffResult.rows.length === 0) {
+        throw new Error('STAFF_NOT_FOUND');
+    }
+    const staffId = staffResult.rows[0].staff_id;
+
+    const result = await pool.query(
+        `
+    SELECT
+      b.booking_id,
+      b.booking_status,
+      b.created_at,
+      bd.facility_id,
+      f.name AS facility_name,
+      TO_CHAR(bd.date, 'YYYY-MM-DD') AS date,
+      TO_CHAR(bd.start_time, 'HH24:MI') AS start_time,
+      TO_CHAR(bd.end_time, 'HH24:MI') AS end_time,
+      bd.intended_activity,
+      bd.member_id,
+      u.first_name AS member_first_name,
+      u.last_name AS member_last_name,
+      u.email AS member_email
+    FROM public.bookings b
+    JOIN public.booking_details bd ON b.booking_detail_id = bd.booking_detail_id
+    JOIN public.facilities f ON bd.facility_id = f.facility_id
+    JOIN public.staff_facilities sf ON sf.facility_id = bd.facility_id
+    JOIN public.members m ON bd.member_id = m.member_id
+    JOIN public.users u ON m.user_id = u.id
+    WHERE sf.staff_id = $1
+      AND b.booking_status = 'upcoming'
+    ORDER BY bd.date ASC, bd.start_time ASC
+    `,
+        [staffId]
+    );
+
+    return result.rows.map((row) => ({
+        bookingId: row.booking_id,
+        bookingStatus: row.booking_status,
+        createdAt: row.created_at,
+        facility: {
+            facilityId: row.facility_id,
+            name: row.facility_name,
+        },
+        bookingDate: row.date,
+        startTime: row.start_time,
+        endTime: row.end_time,
+        intendedActivity: row.intended_activity,
+        member: {
+            memberId: row.member_id,
+            firstName: row.member_first_name,
+            lastName: row.member_last_name,
+            email: row.member_email,
+        },
+    }));
+};
+
+/**
+ * The staff mark completed
+ * @param {number} bookingId
+ * @param {string} userId
+ */
+const completeBooking = async (bookingId, userId) => {
+    // 1. find staff_id
+    const staffResult = await pool.query(
+        `SELECT staff_id FROM public.staff WHERE user_id = $1`,
+        [userId]
+    );
+    if (staffResult.rows.length === 0) {
+        throw new Error('STAFF_NOT_FOUND');
+    }
+    const staffId = staffResult.rows[0].staff_id;
+
+    // 2.booking details
+    const bookingResult = await pool.query(
+        `
+    SELECT b.booking_id, b.booking_status, bd.facility_id,
+           f.name AS facility_name, bd.member_id,
+           TO_CHAR(bd.date, 'YYYY-MM-DD') AS date,
+           TO_CHAR(bd.start_time, 'HH24:MI') AS start_time,
+           TO_CHAR(bd.end_time, 'HH24:MI') AS end_time
+    FROM public.bookings b
+    JOIN public.booking_details bd ON b.booking_detail_id = bd.booking_detail_id
+    JOIN public.facilities f ON bd.facility_id = f.facility_id
+    WHERE b.booking_id = $1
+    `,
+        [bookingId]
+    );
+
+    if (bookingResult.rows.length === 0) {
+        throw new Error('BOOKING_NOT_FOUND');
+    }
+
+    const booking = bookingResult.rows[0];
+
+    // 3. check upcoming
+    if (booking.booking_status !== 'upcoming') {
+        throw new Error('BOOKING_NOT_UPCOMING');
+    }
+
+    // 4. Verify that the employee is in charge of this facility
+    const sfResult = await pool.query(
+        `SELECT staff_facility_id FROM public.staff_facilities
+     WHERE staff_id = $1 AND facility_id = $2`,
+        [staffId, booking.facility_id]
+    );
+    if (sfResult.rows.length === 0) {
+        throw new Error('STAFF_NOT_AUTHORIZED');
+    }
+
+    // 5. update completed
+    await pool.query(
+        `UPDATE public.bookings SET booking_status = 'completed' WHERE booking_id = $1`,
+        [bookingId]
+    );
+
+    // 6. notification
+    const memberUserResult = await pool.query(
+        `SELECT user_id FROM public.members WHERE member_id = $1`,
+        [booking.member_id]
+    );
+    if (memberUserResult.rows.length > 0) {
+        await pool.query(
+            `INSERT INTO public.notification_histories (user_id, message, type)
+       VALUES ($1, $2, 'booking_completed')`,
+            [
+                memberUserResult.rows[0].user_id,
+                `Your session at ${booking.facility_name} on ${booking.date} (${booking.start_time}-${booking.end_time}) has been marked as completed.`,
+            ]
+        );
+    }
+
+    return {
+        bookingId,
+        message: `Booking completed for ${booking.facility_name}`,
+    };
+};
+
 module.exports = {
     getAvailableSlots,
     submitBookingRequest,
@@ -798,4 +944,6 @@ module.exports = {
     getNotifications,
     markNotificationRead,
     markAllNotificationsRead,
+    getUpcomingBookingsForStaff,
+    completeBooking,
 };
