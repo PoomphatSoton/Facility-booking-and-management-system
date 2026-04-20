@@ -65,6 +65,7 @@ export default function Notifications() {
             booking_approved: { bg: "success", label: "Approved" },
             booking_rejected: { bg: "danger", label: "Rejected" },
             booking_cancelled: { bg: "secondary", label: "Cancelled" },
+            alt_suggested: { bg: "info", label: "Alternative Suggested" },
         };
         const config = type && variants[type] ? variants[type] : { bg: "info", label: type || "Info" };
         return <Badge bg={config.bg}>{config.label}</Badge>;

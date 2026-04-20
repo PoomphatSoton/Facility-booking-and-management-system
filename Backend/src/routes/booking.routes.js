@@ -105,4 +105,28 @@ router.post(
     bookingController.cancelPendingRequest
 );
 
+// Staff search for alternative facilities
+router.get(
+    '/requests/:requestId/alternatives',
+    requireAuth,
+    requireRole(['staff']),
+    bookingController.searchAlternatives
+);
+
+// Staff recommend alternative facilities
+router.post(
+    '/requests/:requestId/suggest-alternative',
+    requireAuth,
+    requireRole(['staff']),
+    bookingController.suggestAlternative
+);
+
+// Member response the recommendation
+router.post(
+    '/requests/:requestId/respond-alternative',
+    requireAuth,
+    requireRole(['member']),
+    bookingController.respondToAlternative
+);
+
 module.exports = router;

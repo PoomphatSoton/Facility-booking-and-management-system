@@ -11,6 +11,9 @@ import type {
     NotificationsResponse,
     UpcomingBookingsForStaffResponse,
     CompleteBookingResponse,
+    AlternativesResponse,
+    SuggestAlternativeResponse,
+    RespondAlternativeResponse,
 } from "./types";
 
 export const bookingService = {
@@ -111,6 +114,35 @@ export const bookingService = {
         const response = await api.post<CancelBookingResponse>(
             `/bookings/requests/${requestId}/cancel`,
             {}
+        );
+        return response.data;
+    },
+
+    async searchAlternatives(requestId: number): Promise<AlternativesResponse> {
+        const response = await api.get<AlternativesResponse>(
+            `/bookings/requests/${requestId}/alternatives`
+        );
+        return response.data;
+    },
+
+    async suggestAlternative(
+        requestId: number,
+        altFacilityId: number
+    ): Promise<SuggestAlternativeResponse> {
+        const response = await api.post<SuggestAlternativeResponse>(
+            `/bookings/requests/${requestId}/suggest-alternative`,
+            { altFacilityId }
+        );
+        return response.data;
+    },
+
+    async respondToAlternative(
+        requestId: number,
+        accept: boolean
+    ): Promise<RespondAlternativeResponse> {
+        const response = await api.post<RespondAlternativeResponse>(
+            `/bookings/requests/${requestId}/respond-alternative`,
+            { accept }
         );
         return response.data;
     },

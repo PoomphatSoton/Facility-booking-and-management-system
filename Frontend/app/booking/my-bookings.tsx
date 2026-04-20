@@ -95,6 +95,7 @@ export default function MyBookings() {
             cancelled: "secondary",
             pending: "warning",
             rejected: "danger",
+            alt_suggested: "info",
         };
         return (
             <Badge bg={variants[status] || "info"} text={status === "pending" ? "dark" : undefined}>
@@ -138,6 +139,66 @@ export default function MyBookings() {
                                 ? "Cancelling..."
                                 : "Cancel Booking"}
                         </Button>
+                    </div>
+                )}
+                {item.requestStatus === "alt_suggested" && item.bookingRequestId && (
+                    <div className="mt-3">
+                        <Alert variant="info" className="mb-2">
+                            <strong>Staff suggested an alternative:</strong>{" "}
+                            {item.altFacilityName || "Unknown facility"}
+                        </Alert>
+                        <div className="d-flex gap-2">
+                            <Button
+                                variant="success"
+                                size="sm"
+                                onClick={async () => {
+                                    try {
+                                        setErrorMsg("");
+                                        setSuccessMsg("");
+                                        const response = await bookingService.respondToAlternative(
+                                            item.bookingRequestId!,
+                                            true
+                                        );
+                                        if (response.status === "ok") {
+                                            setSuccessMsg(response.data?.message || "Alternative accepted!");
+                                            await loadBookings();
+                                        } else {
+                                            setErrorMsg(response.message || "Failed to accept");
+                                        }
+                                    } catch (err: any) {
+                                        setErrorMsg(err?.message || "Failed to accept alternative");
+                                    }
+                                }}
+                            >
+                                Accept Alternative
+                            </Button>
+                            <Button
+                                variant="outline-danger"
+                                size="sm"
+                                onClick={async () => {
+                                    const confirmed = window.confirm("Decline this alternative? The request will be closed.");
+                                    if (!confirmed) return;
+                                    try {
+                                        setErrorMsg("");
+                                        setSuccessMsg("");
+                                        const response = await bookingService.respondToAlternative(
+                                            item.bookingRequestId!,
+                                            false
+                                        );
+                                        if (response.status === "ok") {
+                                            setSuccessMsg(response.data?.message || "Alternative declined.");
+                                            await loadBookings();
+                                        } else {
+                                            setErrorMsg(response.message || "Failed to decline");
+                                        }
+                                    } catch (err: any) {
+                                        setErrorMsg(err?.message || "Failed to decline alternative");
+                                    }
+                                }}
+                            >
+                                Decline
+                            </Button>
+                        </div>
                     </div>
                 )}
                 {item.requestStatus === "pending" && item.bookingRequestId && (
