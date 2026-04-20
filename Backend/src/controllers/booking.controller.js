@@ -322,6 +322,92 @@ const cancelPendingRequest = async (req, res) => {
     }
 };
 
+const searchAlternatives = async (req, res) => {
+    try {
+        const requestId = parseInt(req.params.requestId, 10);
+        if (isNaN(requestId)) {
+            return res.status(400).json({ status: 'error', message: 'invalid request id' });
+        }
+        const userId = req.user.id;
+        const result = await bookingService.searchAlternativeFacilities(requestId, userId);
+        return res.status(200).json({ status: 'ok', data: result });
+    } catch (error) {
+        const errorMap = {
+            STAFF_NOT_FOUND: { s: 404, m: 'staff record not found' },
+            REQUEST_NOT_FOUND: { s: 404, m: 'request not found' },
+            REQUEST_NOT_PENDING: { s: 400, m: 'request is not pending' },
+        };
+        const mapped = errorMap[error.message];
+        if (mapped) {
+            return res.status(mapped.s).json({ status: 'error', code: error.message, message: mapped.m });
+        }
+        console.error('searchAlternatives error:', error);
+        return res.status(500).json({ status: 'error', message: 'internal server error' });
+    }
+};
+
+const suggestAlternative = async (req, res) => {
+    try {
+        const requestId = parseInt(req.params.requestId, 10);
+        if (isNaN(requestId)) {
+            return res.status(400).json({ status: 'error', message: 'invalid request id' });
+        }
+        const { altFacilityId } = req.body;
+        if (!altFacilityId) {
+            return res.status(400).json({ status: 'error', message: 'altFacilityId is required' });
+        }
+        const userId = req.user.id;
+        const result = await bookingService.suggestAlternative(requestId, parseInt(altFacilityId, 10), userId);
+        return res.status(200).json({ status: 'ok', data: result });
+    } catch (error) {
+        const errorMap = {
+            STAFF_NOT_FOUND: { s: 404, m: 'staff record not found' },
+            REQUEST_NOT_FOUND: { s: 404, m: 'request not found' },
+            REQUEST_NOT_PENDING: { s: 400, m: 'request is not pending' },
+            STAFF_NOT_AUTHORIZED: { s: 403, m: 'not authorized for this facility' },
+            ALT_FACILITY_NOT_FOUND: { s: 404, m: 'alternative facility not found' },
+        };
+        const mapped = errorMap[error.message];
+        if (mapped) {
+            return res.status(mapped.s).json({ status: 'error', code: error.message, message: mapped.m });
+        }
+        console.error('suggestAlternative error:', error);
+        return res.status(500).json({ status: 'error', message: 'internal server error' });
+    }
+};
+
+const respondToAlternative = async (req, res) => {
+    try {
+        const requestId = parseInt(req.params.requestId, 10);
+        if (isNaN(requestId)) {
+            return res.status(400).json({ status: 'error', message: 'invalid request id' });
+        }
+        const { accept } = req.body;
+        if (accept === undefined) {
+            return res.status(400).json({ status: 'error', message: 'accept field is required (true or false)' });
+        }
+        const userId = req.user.id;
+        const result = await bookingService.respondToAlternative(requestId, userId, accept);
+        return res.status(200).json({ status: 'ok', data: result });
+    } catch (error) {
+        const errorMap = {
+            MEMBER_NOT_FOUND: { s: 404, m: 'member record not found' },
+            REQUEST_NOT_FOUND: { s: 404, m: 'request not found' },
+            NOT_YOUR_REQUEST: { s: 403, m: 'this request does not belong to you' },
+            NO_ALTERNATIVE_PENDING: { s: 400, m: 'no alternative suggestion to respond to' },
+            NO_ALTERNATIVE_FACILITY: { s: 400, m: 'no alternative facility specified' },
+            ALT_FACILITY_NOT_FOUND: { s: 404, m: 'alternative facility no longer exists' },
+            ALT_FACILITY_FULL: { s: 409, m: 'alternative facility is now full, please submit a new booking' },
+        };
+        const mapped = errorMap[error.message];
+        if (mapped) {
+            return res.status(mapped.s).json({ status: 'error', code: error.message, message: mapped.m });
+        }
+        console.error('respondToAlternative error:', error);
+        return res.status(500).json({ status: 'error', message: 'internal server error' });
+    }
+};
+
 module.exports = {
     getAvailableSlots,
     submitBookingRequest,
@@ -336,4 +422,7 @@ module.exports = {
     getUpcomingBookings,
     completeBooking,
     cancelPendingRequest,
+    searchAlternatives,
+    suggestAlternative,
+    respondToAlternative,
 };

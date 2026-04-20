@@ -553,15 +553,18 @@ const getMyBookings = async (userId) => {
       br.created_at,
       bd.facility_id,
       f.name AS facility_name,
-      bd.date,
+      TO_CHAR(bd.date, 'YYYY-MM-DD') AS date,
       TO_CHAR(bd.start_time, 'HH24:MI') AS start_time,
       TO_CHAR(bd.end_time, 'HH24:MI') AS end_time,
-      bd.intended_activity
+      bd.intended_activity,
+      bd.alt_facility_id,
+      af.name AS alt_facility_name
     FROM public.booking_requests br
     JOIN public.booking_details bd ON br.booking_detail_id = bd.booking_detail_id
     JOIN public.facilities f ON bd.facility_id = f.facility_id
+    LEFT JOIN public.facilities af ON af.facility_id = CAST(NULLIF(bd.alt_facility_id, '') AS INTEGER)
     WHERE bd.member_id = $1
-      AND br.request_status = 'pending'
+    AND br.request_status IN ('pending', 'alt_suggested')
     ORDER BY bd.date ASC, bd.start_time ASC
     `,
         [memberId]
@@ -648,6 +651,8 @@ const getMyBookings = async (userId) => {
         startTime: row.start_time,
         endTime: row.end_time,
         intendedActivity: row.intended_activity,
+        altFacilityId: row.alt_facility_id || null,
+        altFacilityName: row.alt_facility_name || null,
     }));
 
     const rejected = rejectedResult.rows.map((row) => ({
@@ -988,6 +993,312 @@ const cancelPendingRequest = async (bookingRequestId, userId) => {
     };
 };
 
+/**
+ * Search for available alternative facilities
+ * @param {number} bookingRequestId
+ * @param {string} userId
+ * @returns {Array}
+ */
+const searchAlternativeFacilities = async (bookingRequestId, userId) => {
+    // 1. find staff_id
+    const staffResult = await pool.query(
+        `SELECT staff_id FROM public.staff WHERE user_id = $1`,
+        [userId]
+    );
+    if (staffResult.rows.length === 0) {
+        throw new Error('STAFF_NOT_FOUND');
+    }
+
+    const requestResult = await pool.query(
+        `
+    SELECT br.booking_request_id, br.request_status,
+           bd.facility_id, bd.date, bd.start_time, bd.end_time
+    FROM public.booking_requests br
+    JOIN public.booking_details bd ON br.booking_detail_id = bd.booking_detail_id
+    WHERE br.booking_request_id = $1
+    `,
+        [bookingRequestId]
+    );
+
+    if (requestResult.rows.length === 0) {
+        throw new Error('REQUEST_NOT_FOUND');
+    }
+
+    const request = requestResult.rows[0];
+
+    if (request.request_status !== 'pending') {
+        throw new Error('REQUEST_NOT_PENDING');
+    }
+
+    const alternativesResult = await pool.query(
+        `
+    SELECT
+      f.facility_id,
+      f.name,
+      f.description,
+      f.max_people,
+      COALESCE(occupied.cnt, 0) AS occupied_count
+    FROM public.facilities f
+    LEFT JOIN (
+      SELECT bd.facility_id, COUNT(*) AS cnt
+      FROM public.bookings b
+      JOIN public.booking_details bd ON b.booking_detail_id = bd.booking_detail_id
+      WHERE bd.date = $1
+        AND bd.start_time < $3
+        AND bd.end_time > $2
+        AND b.booking_status != 'cancelled'
+      GROUP BY bd.facility_id
+    ) occupied ON occupied.facility_id = f.facility_id
+    WHERE f.facility_id != $4
+    ORDER BY f.name
+    `,
+        [request.date, request.start_time, request.end_time, request.facility_id]
+    );
+
+    return alternativesResult.rows
+        .filter((row) => parseInt(row.occupied_count, 10) < row.max_people)
+        .map((row) => ({
+            facilityId: row.facility_id,
+            name: row.name,
+            description: row.description,
+            maxPeople: row.max_people,
+            occupiedCount: parseInt(row.occupied_count, 10),
+            spotsLeft: row.max_people - parseInt(row.occupied_count, 10),
+        }));
+};
+
+/**
+ * Staff Suggested Alternative Facilities
+ * @param {number} bookingRequestId
+ * @param {number} altFacilityId
+ * @param {string} userId
+ */
+const suggestAlternative = async (bookingRequestId, altFacilityId, userId) => {
+
+    const staffResult = await pool.query(
+        `SELECT staff_id FROM public.staff WHERE user_id = $1`,
+        [userId]
+    );
+    if (staffResult.rows.length === 0) {
+        throw new Error('STAFF_NOT_FOUND');
+    }
+    const staffId = staffResult.rows[0].staff_id;
+
+
+    const requestResult = await pool.query(
+        `
+    SELECT br.booking_request_id, br.request_status,
+           bd.booking_detail_id, bd.facility_id, bd.member_id,
+           TO_CHAR(bd.date, 'YYYY-MM-DD') AS date,
+           TO_CHAR(bd.start_time, 'HH24:MI') AS start_time,
+           TO_CHAR(bd.end_time, 'HH24:MI') AS end_time,
+           f.name AS original_facility_name
+    FROM public.booking_requests br
+    JOIN public.booking_details bd ON br.booking_detail_id = bd.booking_detail_id
+    JOIN public.facilities f ON bd.facility_id = f.facility_id
+    WHERE br.booking_request_id = $1
+    `,
+        [bookingRequestId]
+    );
+
+    if (requestResult.rows.length === 0) {
+        throw new Error('REQUEST_NOT_FOUND');
+    }
+
+    const request = requestResult.rows[0];
+
+    if (request.request_status !== 'pending') {
+        throw new Error('REQUEST_NOT_PENDING');
+    }
+
+    // Verify staff permissions
+    const sfResult = await pool.query(
+        `SELECT staff_facility_id FROM public.staff_facilities
+     WHERE staff_id = $1 AND facility_id = $2`,
+        [staffId, request.facility_id]
+    );
+    if (sfResult.rows.length === 0) {
+        throw new Error('STAFF_NOT_AUTHORIZED');
+    }
+
+    // exist?
+    const altFacilityResult = await pool.query(
+        `SELECT facility_id, name FROM public.facilities WHERE facility_id = $1`,
+        [altFacilityId]
+    );
+    if (altFacilityResult.rows.length === 0) {
+        throw new Error('ALT_FACILITY_NOT_FOUND');
+    }
+    const altFacilityName = altFacilityResult.rows[0].name;
+
+    await pool.query(
+        `UPDATE public.booking_details SET alt_facility_id = $2, staff_id = $3
+     WHERE booking_detail_id = $1`,
+        [request.booking_detail_id, String(altFacilityId), staffId]
+    );
+
+    await pool.query(
+        `UPDATE public.booking_requests SET request_status = 'alt_suggested'
+     WHERE booking_request_id = $1`,
+        [bookingRequestId]
+    );
+
+    const memberUserResult = await pool.query(
+        `SELECT user_id FROM public.members WHERE member_id = $1`,
+        [request.member_id]
+    );
+    if (memberUserResult.rows.length > 0) {
+        await pool.query(
+            `INSERT INTO public.notification_histories (user_id, message, type)
+       VALUES ($1, $2, 'alt_suggested')`,
+            [
+                memberUserResult.rows[0].user_id,
+                `Staff suggested an alternative facility for your booking on ${request.date} (${request.start_time}-${request.end_time}): ${altFacilityName} instead of ${request.original_facility_name}. Please accept or decline.`,
+            ]
+        );
+    }
+
+    return {
+        bookingRequestId,
+        altFacilityId,
+        altFacilityName,
+        message: `Alternative suggested: ${altFacilityName}`,
+    };
+};
+
+/**
+ * Alternative Suggestions for Member Responses
+ * @param {number} bookingRequestId
+ * @param {string} userId
+ * @param {boolean} accept
+ */
+const respondToAlternative = async (bookingRequestId, userId, accept) => {
+
+    const memberResult = await pool.query(
+        `SELECT member_id FROM public.members WHERE user_id = $1`,
+        [userId]
+    );
+    if (memberResult.rows.length === 0) {
+        throw new Error('MEMBER_NOT_FOUND');
+    }
+    const memberId = memberResult.rows[0].member_id;
+
+
+    const requestResult = await pool.query(
+        `
+    SELECT br.booking_request_id, br.request_status,
+           bd.booking_detail_id, bd.facility_id, bd.member_id,
+           bd.alt_facility_id,
+           TO_CHAR(bd.date, 'YYYY-MM-DD') AS date,
+           bd.start_time, bd.end_time,
+           f.name AS original_facility_name
+    FROM public.booking_requests br
+    JOIN public.booking_details bd ON br.booking_detail_id = bd.booking_detail_id
+    JOIN public.facilities f ON bd.facility_id = f.facility_id
+    WHERE br.booking_request_id = $1
+    `,
+        [bookingRequestId]
+    );
+
+    if (requestResult.rows.length === 0) {
+        throw new Error('REQUEST_NOT_FOUND');
+    }
+
+    const request = requestResult.rows[0];
+
+    if (request.member_id !== memberId) {
+        throw new Error('NOT_YOUR_REQUEST');
+    }
+
+    if (request.request_status !== 'alt_suggested') {
+        throw new Error('NO_ALTERNATIVE_PENDING');
+    }
+
+    if (!request.alt_facility_id) {
+        throw new Error('NO_ALTERNATIVE_FACILITY');
+    }
+
+    const altFacilityId = parseInt(request.alt_facility_id, 10);
+
+    if (!accept) {
+        await pool.query(
+            `UPDATE public.booking_requests SET request_status = 'rejected'
+       WHERE booking_request_id = $1`,
+            [bookingRequestId]
+        );
+
+        return { bookingRequestId, accepted: false, message: 'Alternative declined. Request closed.' };
+    }
+
+    const altFacilityResult = await pool.query(
+        `SELECT facility_id, name, max_people FROM public.facilities WHERE facility_id = $1`,
+        [altFacilityId]
+    );
+
+    if (altFacilityResult.rows.length === 0) {
+        throw new Error('ALT_FACILITY_NOT_FOUND');
+    }
+
+    const altFacility = altFacilityResult.rows[0];
+
+    // Check for conflicts again (alternative facilities may be fully booked during the waiting period)
+    const occupancyResult = await pool.query(
+        `
+    SELECT COUNT(*) AS occupied_count
+    FROM public.bookings b
+    JOIN public.booking_details bd ON b.booking_detail_id = bd.booking_detail_id
+    WHERE bd.facility_id = $1
+      AND bd.date = $2
+      AND bd.start_time < $4
+      AND bd.end_time > $3
+      AND b.booking_status != 'cancelled'
+    `,
+        [altFacilityId, request.date, request.start_time, request.end_time]
+    );
+
+    const occupied = parseInt(occupancyResult.rows[0].occupied_count, 10);
+    if (occupied >= altFacility.max_people) {
+        throw new Error('ALT_FACILITY_FULL');
+    }
+
+    // approve
+    await pool.query(
+        `UPDATE public.booking_details SET facility_id = $2
+     WHERE booking_detail_id = $1`,
+        [request.booking_detail_id, altFacilityId]
+    );
+
+    await pool.query(
+        `UPDATE public.booking_requests SET request_status = 'approved'
+     WHERE booking_request_id = $1`,
+        [bookingRequestId]
+    );
+
+    const bookingResult = await pool.query(
+        `INSERT INTO public.bookings (booking_detail_id, booking_status)
+     VALUES ($1, 'upcoming')
+     RETURNING booking_id`,
+        [request.booking_detail_id]
+    );
+
+    await pool.query(
+        `INSERT INTO public.notification_histories (user_id, message, type)
+     VALUES ($1, $2, 'booking_approved')`,
+        [
+            userId,
+            `Your booking has been confirmed at ${altFacility.name} on ${request.date}. The alternative facility was accepted.`,
+        ]
+    );
+
+    return {
+        bookingRequestId,
+        bookingId: bookingResult.rows[0].booking_id,
+        accepted: true,
+        altFacilityName: altFacility.name,
+        message: `Alternative accepted. Booking confirmed at ${altFacility.name}.`,
+    };
+};
+
 module.exports = {
     getAvailableSlots,
     submitBookingRequest,
@@ -1002,4 +1313,7 @@ module.exports = {
     getUpcomingBookingsForStaff,
     completeBooking,
     cancelPendingRequest,
+    searchAlternativeFacilities,
+    suggestAlternative,
+    respondToAlternative,
 };

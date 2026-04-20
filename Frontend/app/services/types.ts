@@ -271,6 +271,8 @@ export interface MyBookingItem {
   startTime: string;
   endTime: string;
   intendedActivity: string | null;
+  altFacilityId?: string | null;
+  altFacilityName?: string | null;
 }
 
 export interface MyBookingsData {
@@ -332,6 +334,47 @@ export interface UpcomingBookingsForStaffResponse {
 export interface CompleteBookingResponse {
   status: "ok" | "error";
   data?: { bookingId: number; message: string };
+  message?: string;
+  code?: string;
+}
+
+// ==================== Alternative Facility ====================
+
+export interface AlternativeFacility {
+  facilityId: number;
+  name: string;
+  description: string | null;
+  maxPeople: number;
+  occupiedCount: number;
+  spotsLeft: number;
+}
+
+export interface AlternativesResponse {
+  status: "ok" | "error";
+  data: AlternativeFacility[];
+  message?: string;
+}
+
+export interface SuggestAlternativeResponse {
+  status: "ok" | "error";
+  data?: {
+    bookingRequestId: number;
+    altFacilityId: number;
+    altFacilityName: string;
+    message: string;
+  };
+  message?: string;
+}
+
+export interface RespondAlternativeResponse {
+  status: "ok" | "error";
+  data?: {
+    bookingRequestId: number;
+    bookingId?: number;
+    accepted: boolean;
+    altFacilityName?: string;
+    message: string;
+  };
   message?: string;
   code?: string;
 }
