@@ -43,34 +43,36 @@ const getAvailableSlots = async (facilityId, daysAhead = 7) => {
         return { facilityId, facilityName: facility.name, maxPeople, slots: [] };
     }
 
-    // 3. Query all approved and non-cancelled reservations on these dates to calculate the occupancy count.
-    const occupancyResult = await pool.query(
+    const bookingsResult = await pool.query(
         `SELECT 
-        bd.date,
+        TO_CHAR(bd.date, 'YYYY-MM-DD') AS date,
         TO_CHAR(bd.start_time, 'HH24:MI') AS start_time,
-        TO_CHAR(bd.end_time, 'HH24:MI') AS end_time,
-        COUNT(*) AS occupied_count
+        TO_CHAR(bd.end_time, 'HH24:MI') AS end_time
      FROM public.bookings b
      JOIN public.booking_details bd ON b.booking_detail_id = bd.booking_detail_id
      WHERE bd.facility_id = $1
        AND bd.date >= CURRENT_DATE
        AND bd.date < CURRENT_DATE + ($2 || ' days')::interval
-       AND b.booking_status != 'cancelled'
-     GROUP BY bd.date, bd.start_time, bd.end_time`,
+       AND b.booking_status != 'cancelled'`,
         [facilityId, daysAhead]
     );
 
-    const occupancyMap = new Map();
-    for (const row of occupancyResult.rows) {
-        const key = `${row.date}_${row.start_time}_${row.end_time}`;
-        occupancyMap.set(key, parseInt(row.occupied_count, 10));
-    }
+    const existingBookings = bookingsResult.rows;
 
-    // 4. Mark whether each time slot is available
+    // 4. Calculate the occupancy count using the overlap algorithm
     const enrichedSlots = slots.map((slot) => {
         const dateStr = slot.slot_date;
-        const key = `${dateStr}_${slot.start_time}_${slot.end_time}`;
-        const occupied = occupancyMap.get(key) || 0;
+
+        const occupied = existingBookings.filter((booking) => {
+            if (booking.date !== dateStr) return false;
+            // booking.start < slot.end AND booking.end > slot.start
+            const bookingStart = booking.start_time;
+            const bookingEnd = booking.end_time;
+            const slotStart = slot.start_time;
+            const slotEnd = slot.end_time;
+            return bookingStart < slotEnd && bookingEnd > slotStart;
+        }).length;
+
         return {
             slotTimeId: slot.slot_time_id,
             slotDate: dateStr,
@@ -92,13 +94,13 @@ const getAvailableSlots = async (facilityId, daysAhead = 7) => {
 /**
  * Member submits a reservation request
  * @param {Object} params
- * @param {string} params.userId -  user_id
+ * @param {string} params.userId
  * @param {number} params.facilityId
- * @param {string} params.slotDate - 'YYYY-MM-DD'
- * @param {string} params.startTime - 'HH:MM'
- * @param {string} params.endTime - 'HH:MM'
- * @param {string} params.intendedActivity - Activity description
- * @returns {Object} Created request information
+ * @param {string} params.slotDate
+ * @param {string} params.startTime
+ * @param {string} params.endTime
+ * @param {string} params.intendedActivity
+ * @returns {Object}
  */
 const submitBookingRequest = async ({
                                         userId,
@@ -107,6 +109,7 @@ const submitBookingRequest = async ({
                                         startTime,
                                         endTime,
                                         intendedActivity,
+                                        customTime = false,
                                     }) => {
     // 1. Find the member_id corresponding to the current user
     const memberResult = await pool.query(
@@ -127,18 +130,29 @@ const submitBookingRequest = async ({
         throw new Error('FACILITY_NOT_FOUND');
     }
 
-    // 3. Check that the time slot exists and is not in the past
-    const slotResult = await pool.query(
-        `SELECT slot_time_id FROM public.facility_slot_times
-     WHERE facility_id = $1 
-       AND slot_date = $2 
-       AND slot_start_time = $3 
-       AND slot_end_time = $4
-       AND slot_date >= CURRENT_DATE`,
-        [facilityId, slotDate, startTime, endTime]
-    );
-    if (slotResult.rows.length === 0) {
-        throw new Error('SLOT_NOT_AVAILABLE');
+    if (!customTime) {
+        const slotResult = await pool.query(
+            `SELECT slot_time_id FROM public.facility_slot_times
+       WHERE facility_id = $1 
+         AND slot_date = $2 
+         AND slot_start_time = $3 
+         AND slot_end_time = $4
+         AND slot_date >= CURRENT_DATE`,
+            [facilityId, slotDate, startTime, endTime]
+        );
+        if (slotResult.rows.length === 0) {
+            throw new Error('SLOT_NOT_AVAILABLE');
+        }
+    } else {
+        if (startTime >= endTime) {
+            throw new Error('INVALID_TIME_RANGE');
+        }
+        if (startTime < '08:00' || endTime > '22:00') {
+            throw new Error('OUTSIDE_OPENING_HOURS');
+        }
+        if (slotDate < new Date().toISOString().slice(0, 10)) {
+            throw new Error('DATE_IN_PAST');
+        }
     }
 
     // 4. Check whether this member already has a pending request for the same time slot (to prevent duplicate submissions)

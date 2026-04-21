@@ -48,6 +48,7 @@ const submitBookingRequest = async (req, res) => {
             startTime,
             endTime,
             intendedActivity,
+            customTime: req.body.customTime || false,
         });
 
         return res.status(201).json({ status: 'ok', data: result });
@@ -57,6 +58,9 @@ const submitBookingRequest = async (req, res) => {
             FACILITY_NOT_FOUND: 'facility not found',
             SLOT_NOT_AVAILABLE: 'this slot does not exist or has passed',
             DUPLICATE_REQUEST: 'you already have a pending request for this slot',
+            INVALID_TIME_RANGE: 'end time must be after start time',
+            OUTSIDE_OPENING_HOURS: 'booking must be between 08:00 and 22:00',
+            DATE_IN_PAST: 'cannot book a date in the past',
         };
 
         if (errorMessages[error.message]) {
