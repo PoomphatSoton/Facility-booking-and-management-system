@@ -1,28 +1,34 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router";
-import { Alert, Button, Card, Form, Spinner } from "react-bootstrap";
+import { Alert, Button, Card, Col, Form, Row, Spinner } from "react-bootstrap";
 import { bookingService } from "~/services/booking.service";
-import type { AvailableSlot, FacilitySlots } from "~/services/types";
+import type { FacilitySlots } from "~/services/types";
 
 export default function NewBooking() {
     const { facilityId } = useParams<{ facilityId: string }>();
     const navigate = useNavigate();
 
     const [facilityData, setFacilityData] = useState<FacilitySlots | null>(null);
-    const [selectedSlot, setSelectedSlot] = useState<AvailableSlot | null>(null);
     const [activity, setActivity] = useState("");
 
-    // select time
-    const [useCustomTime, setUseCustomTime] = useState(false);
-    const [customDate, setCustomDate] = useState("");
-    const [customStartTime, setCustomStartTime] = useState("");
-    const [customEndTime, setCustomEndTime] = useState("");
+    const [selectedDate, setSelectedDate] = useState("");
+    const [startTime, setStartTime] = useState("");
+    const [endTime, setEndTime] = useState("");
+
+    const [spotsInfo, setSpotsInfo] = useState<{
+        occupied: number;
+        available: boolean;
+    } | null>(null);
 
     const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
     const [errorMsg, setErrorMsg] = useState("");
     const [successMsg, setSuccessMsg] = useState("");
 
+    const now = new Date();
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+
+    // Load facilities information and time slot data
     useEffect(() => {
         const loadSlots = async () => {
             if (!facilityId) return;
@@ -35,10 +41,10 @@ export default function NewBooking() {
                 if (response.status === "ok") {
                     setFacilityData(response.data);
                 } else {
-                    setErrorMsg(response.message || "Failed to load slots");
+                    setErrorMsg(response.message || "Failed to load facility data");
                 }
             } catch (err: any) {
-                setErrorMsg(err.message || "Failed to load slots");
+                setErrorMsg(err.message || "Failed to load facility data");
             } finally {
                 setLoading(false);
             }
@@ -46,38 +52,70 @@ export default function NewBooking() {
         void loadSlots();
     }, [facilityId]);
 
+    // Calculate the occupancy status for this time period
+    useEffect(() => {
+        if (!facilityData || !selectedDate || !startTime || !endTime) {
+            setSpotsInfo(null);
+            return;
+        }
+        if (startTime >= endTime) {
+            setSpotsInfo(null);
+            return;
+        }
+
+        const toMin = (t: string) => {
+            const parts = t.split(":");
+            return parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
+        };
+
+        const sStart = toMin(startTime);
+        const sEnd = toMin(endTime);
+
+        const overlappingSlots = facilityData.slots.filter((slot) => {
+            if (slot.slotDate !== selectedDate) return false;
+            const slotStart = toMin(slot.startTime);
+            const slotEnd = toMin(slot.endTime);
+            return slotStart < sEnd && slotEnd > sStart;
+        });
+
+        if (overlappingSlots.length === 0) {
+            setSpotsInfo({ occupied: 0, available: true });
+            return;
+        }
+
+        const maxOccupied = Math.max(...overlappingSlots.map((s) => s.occupied));
+        setSpotsInfo({
+            occupied: maxOccupied,
+            available: maxOccupied < facilityData.maxPeople,
+        });
+    }, [facilityData, selectedDate, startTime, endTime]);
+
+    const isCustomTime = (): boolean => {
+        if (!facilityData || !selectedDate || !startTime || !endTime) return false;
+        const match = facilityData.slots.find(
+            (s) =>
+                s.slotDate === selectedDate &&
+                s.startTime === startTime &&
+                s.endTime === endTime
+        );
+        return !match;
+    };
+
     const handleSubmit = async () => {
         if (!facilityData) return;
 
-        let slotDate: string;
-        let startTime: string;
-        let endTime: string;
-        let isCustom: boolean;
-
-        if (useCustomTime) {
-            if (!customDate || !customStartTime || !customEndTime) {
-                setErrorMsg("Please fill in date, start time, and end time");
-                return;
-            }
-            if (customStartTime >= customEndTime) {
-                setErrorMsg("End time must be after start time");
-                return;
-            }
-            slotDate = customDate;
-            startTime = customStartTime;
-            endTime = customEndTime;
-            isCustom = true;
-        } else {
-            if (!selectedSlot) {
-                setErrorMsg("Please select a time slot");
-                return;
-            }
-            slotDate = selectedSlot.slotDate;
-            startTime = selectedSlot.startTime;
-            endTime = selectedSlot.endTime;
-            isCustom = false;
+        if (!selectedDate) {
+            setErrorMsg("Please select a date");
+            return;
         }
-
+        if (!startTime || !endTime) {
+            setErrorMsg("Please select start and end time");
+            return;
+        }
+        if (startTime >= endTime) {
+            setErrorMsg("End time must be after start time");
+            return;
+        }
         if (!activity.trim()) {
             setErrorMsg("Please describe your intended activity");
             return;
@@ -88,11 +126,11 @@ export default function NewBooking() {
             setErrorMsg("");
             const response = await bookingService.submitBookingRequest({
                 facilityId: facilityData.facilityId,
-                slotDate,
+                slotDate: selectedDate,
                 startTime,
                 endTime,
                 intendedActivity: activity.trim(),
-                customTime: isCustom,
+                customTime: isCustomTime(),
             });
 
             if (response.status === "ok") {
@@ -104,8 +142,7 @@ export default function NewBooking() {
                 setErrorMsg(response.message || "Failed to submit");
             }
         } catch (err: any) {
-            const apiMessage = err?.message || "Failed to submit booking request";
-            setErrorMsg(apiMessage);
+            setErrorMsg(err?.message || "Failed to submit booking request");
         } finally {
             setSubmitting(false);
         }
@@ -115,7 +152,7 @@ export default function NewBooking() {
         return (
             <div className="container py-5 text-center">
                 <Spinner animation="border" />
-                <p className="mt-3">Loading available slots...</p>
+                <p className="mt-3">Loading facility data...</p>
             </div>
         );
     }
@@ -131,19 +168,61 @@ export default function NewBooking() {
         );
     }
 
-    const slotsByDate = facilityData.slots.reduce<Record<string, AvailableSlot[]>>(
-        (acc, slot) => {
-            if (!acc[slot.slotDate]) acc[slot.slotDate] = [];
-            acc[slot.slotDate].push(slot);
-            return acc;
-        },
-        {}
-    );
+    const availableDates = [
+        ...new Set(facilityData.slots.map((s) => s.slotDate)),
+    ].sort();
 
-    const today = new Date().toISOString().slice(0, 10);
+    // Dynamically infer the opening time range from time slot data
+    const getTimeRange = () => {
+        if (!facilityData || facilityData.slots.length === 0) {
+            return { earliest: "08:00", latest: "22:00" };
+        }
+
+        const relevantSlots = selectedDate
+            ? facilityData.slots.filter((s) => s.slotDate === selectedDate)
+            : facilityData.slots;
+
+        if (relevantSlots.length === 0) {
+            return { earliest: "08:00", latest: "22:00" };
+        }
+
+        const earliest = relevantSlots.reduce(
+            (min, s) => (s.startTime < min ? s.startTime : min),
+            relevantSlots[0].startTime
+        );
+        const latest = relevantSlots.reduce(
+            (max, s) => (s.endTime > max ? s.endTime : max),
+            relevantSlots[0].endTime
+        );
+
+        return { earliest, latest };
+    };
+
+    const { earliest, latest } = getTimeRange();
+
+    const toMin = (t: string) => {
+        const parts = t.split(":");
+        return parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
+    };
+
+    const hourOptions: string[] = [];
+    for (let m = toMin(earliest); m <= toMin(latest); m += 60) {
+        const h = Math.floor(m / 60);
+        hourOptions.push(`${String(h).padStart(2, "0")}:00`);
+    }
+
+    const endTimeOptions = hourOptions.filter((t) => t > startTime);
+
+    const canSubmit =
+        selectedDate &&
+        startTime &&
+        endTime &&
+        startTime < endTime &&
+        activity.trim() &&
+        !submitting;
 
     return (
-        <div className="container py-4" style={{ maxWidth: "900px" }}>
+        <div className="container py-4" style={{ maxWidth: "1100px" }}>
             <Button
                 variant="link"
                 className="px-0 mb-3"
@@ -152,171 +231,174 @@ export default function NewBooking() {
                 ← Back to facilities
             </Button>
 
-            <h2>Book {facilityData.facilityName}</h2>
-            <p className="text-muted">
-                Capacity: {facilityData.maxPeople} people per slot
-            </p>
+            <h2>Book Facility</h2>
+            <p className="text-muted">Complete your booking request</p>
 
             {errorMsg && <Alert variant="danger">{errorMsg}</Alert>}
             {successMsg && <Alert variant="success">{successMsg}</Alert>}
 
-            <Card className="mb-4">
-                <Card.Body>
-                    <Card.Title>1. Select booking time</Card.Title>
+            <Row>
+                <Col lg={8}>
+                    <Card className="mb-4">
+                        <Card.Body>
+                            <Card.Title className="mb-4">Booking Details</Card.Title>
 
-                    <div className="d-flex gap-3 mb-3">
-                        <Form.Check
-                            type="radio"
-                            id="mode-slot"
-                            label="Choose a preset time slot"
-                            checked={!useCustomTime}
-                            onChange={() => {
-                                setUseCustomTime(false);
-                                setCustomDate("");
-                                setCustomStartTime("");
-                                setCustomEndTime("");
-                            }}
-                        />
-                        <Form.Check
-                            type="radio"
-                            id="mode-custom"
-                            label="Choose custom time"
-                            checked={useCustomTime}
-                            onChange={() => {
-                                setUseCustomTime(true);
-                                setSelectedSlot(null);
-                            }}
-                        />
-                    </div>
+                            <Form.Group className="mb-4">
+                                <Form.Label>Facility Name</Form.Label>
+                                <Form.Control
+                                    type="text"
+                                    value={facilityData.facilityName}
+                                    disabled
+                                />
+                            </Form.Group>
 
-                    {!useCustomTime ? (
-                        <>
-                            {Object.entries(slotsByDate).map(([date, slots]) => (
-                                <div key={date} className="mb-3">
-                                    <h6 className="mt-3">{date}</h6>
-                                    <div className="d-flex flex-wrap gap-2">
-                                        {slots.map((slot) => {
-                                            const isSelected =
-                                                selectedSlot?.slotTimeId === slot.slotTimeId;
-                                            const isFull = !slot.available;
-                                            return (
-                                                <Button
-                                                    key={slot.slotTimeId}
-                                                    size="sm"
-                                                    variant={
-                                                        isFull
-                                                            ? "outline-secondary"
-                                                            : isSelected
-                                                                ? "primary"
-                                                                : "outline-primary"
-                                                    }
-                                                    disabled={isFull}
-                                                    onClick={() => setSelectedSlot(slot)}
-                                                >
-                                                    {slot.startTime} - {slot.endTime}
-                                                    {isFull
-                                                        ? " (Full)"
-                                                        : ` (${facilityData.maxPeople - slot.occupied}/${facilityData.maxPeople} spots left)`}
-                                                </Button>
-                                            );
-                                        })}
-                                    </div>
-                                </div>
-                            ))}
-                        </>
-                    ) : (
-                        <div className="row g-3">
-                            <div className="col-md-4">
+                            <Form.Group className="mb-4">
                                 <Form.Label>Date</Form.Label>
                                 <Form.Control
                                     type="date"
-                                    value={customDate}
+                                    value={selectedDate}
                                     min={today}
-                                    onChange={(e) => setCustomDate(e.target.value)}
+                                    onChange={(e) => {
+                                        setSelectedDate(e.target.value);
+                                        setStartTime("");
+                                        setEndTime("");
+                                    }}
                                 />
-                            </div>
-                            <div className="col-md-4">
-                                <Form.Label>Start time</Form.Label>
+                            </Form.Group>
+
+                            <Row className="mb-4">
+                                <Col md={6}>
+                                    <Form.Group>
+                                        <Form.Label>Start Time</Form.Label>
+                                        <Form.Select
+                                            value={startTime}
+                                            onChange={(e) => {
+                                                setStartTime(e.target.value);
+                                                setEndTime("");
+                                            }}
+                                            disabled={!selectedDate}
+                                        >
+                                            <option value="">Select start time</option>
+                                            {hourOptions.filter((t) => t < "22:00").map((t) => (
+                                                <option key={t} value={t}>
+                                                    {t}
+                                                </option>
+                                            ))}
+                                        </Form.Select>
+                                    </Form.Group>
+                                </Col>
+                                <Col md={6}>
+                                    <Form.Group>
+                                        <Form.Label>End Time</Form.Label>
+                                        <Form.Select
+                                            value={endTime}
+                                            onChange={(e) => setEndTime(e.target.value)}
+                                            disabled={!startTime}
+                                        >
+                                            <option value="">Select end time</option>
+                                            {endTimeOptions.map((t) => (
+                                                <option key={t} value={t}>
+                                                    {t}
+                                                </option>
+                                            ))}
+                                        </Form.Select>
+                                    </Form.Group>
+                                </Col>
+                            </Row>
+
+                            <Form.Group className="mb-4">
+                                <Form.Label>Intended Activity</Form.Label>
                                 <Form.Control
-                                    type="time"
-                                    value={customStartTime}
-                                    min="08:00"
-                                    max="21:00"
-                                    onChange={(e) => setCustomStartTime(e.target.value)}
+                                    type="text"
+                                    placeholder="e.g., Recreational badminton, Training session"
+                                    value={activity}
+                                    onChange={(e) => setActivity(e.target.value)}
+                                    maxLength={500}
                                 />
-                                <Form.Text className="text-muted">From 08:00</Form.Text>
+                            </Form.Group>
+
+                            <div className="d-flex align-items-center gap-3 mt-4">
+                                <Button
+                                    variant="primary"
+                                    size="lg"
+                                    onClick={handleSubmit}
+                                    disabled={!canSubmit}
+                                >
+                                    {submitting ? "Submitting..." : "Submit Booking Request"}
+                                </Button>
+                                <Button
+                                    variant="link"
+                                    className="text-muted"
+                                    onClick={() => navigate("/")}
+                                >
+                                    Back to Facilities
+                                </Button>
                             </div>
-                            <div className="col-md-4">
-                                <Form.Label>End time</Form.Label>
-                                <Form.Control
-                                    type="time"
-                                    value={customEndTime}
-                                    min="09:00"
-                                    max="22:00"
-                                    onChange={(e) => setCustomEndTime(e.target.value)}
-                                />
-                                <Form.Text className="text-muted">Until 22:00</Form.Text>
+                        </Card.Body>
+                    </Card>
+                </Col>
+
+                <Col lg={4}>
+                    <Card className="shadow-sm">
+                        <Card.Body>
+                            <Card.Title className="mb-3">Booking Summary</Card.Title>
+
+                            <div className="mb-3">
+                                <div className="text-muted small">Selected Facility</div>
+                                <div className="fw-bold">{facilityData.facilityName}</div>
                             </div>
-                            <div className="col-12">
-                                <Alert variant="info" className="mt-2 mb-0">
-                                    Custom time allows flexible booking (e.g. 09:30 - 11:45).
-                                    Staff will check availability when reviewing your request.
+
+                            {selectedDate && (
+                                <div className="mb-3">
+                                    <div className="text-muted small">Date</div>
+                                    <div className="fw-bold">{selectedDate}</div>
+                                </div>
+                            )}
+
+                            {startTime && endTime && startTime < endTime && (
+                                <div className="mb-3">
+                                    <div className="text-muted small">Time Slot</div>
+                                    <div className="fw-bold">
+                                        {startTime} – {endTime}
+                                    </div>
+                                </div>
+                            )}
+
+                            {spotsInfo && startTime && endTime && startTime < endTime && (
+                                <div className="mb-3">
+                                    {spotsInfo.available ? (
+                                        <Alert variant="success" className="py-2 mb-0">
+                                            <strong>Available</strong>
+                                            <div className="small">
+                                                {facilityData.maxPeople - spotsInfo.occupied}/
+                                                {facilityData.maxPeople} spots left · Pending approval
+                                                from staff
+                                            </div>
+                                        </Alert>
+                                    ) : (
+                                        <Alert variant="danger" className="py-2 mb-0">
+                                            <strong>Full</strong>
+                                            <div className="small">
+                                                This time slot has no available spots
+                                            </div>
+                                        </Alert>
+                                    )}
+                                </div>
+                            )}
+
+                            {facilityData.maxPeople && (
+                                <Alert variant="info" className="py-2 mt-3 mb-0">
+                                    <strong>Usage Guidelines</strong>
+                                    <div className="small">
+                                        Maximum {facilityData.maxPeople} people per slot.
+                                        Please arrive 5 minutes before your booking time.
+                                    </div>
                                 </Alert>
-                            </div>
-                        </div>
-                    )}
-                </Card.Body>
-            </Card>
-
-            <Card className="mb-4">
-                <Card.Body>
-                    <Card.Title>2. Describe your intended activity</Card.Title>
-                    <Form.Control
-                        as="textarea"
-                        rows={3}
-                        placeholder="e.g. Badminton training with 3 friends"
-                        value={activity}
-                        onChange={(e) => setActivity(e.target.value)}
-                        maxLength={500}
-                    />
-                    <Form.Text className="text-muted">
-                        {activity.length} / 500 characters
-                    </Form.Text>
-                </Card.Body>
-            </Card>
-
-            {(selectedSlot || (useCustomTime && customDate && customStartTime && customEndTime)) && (
-                <Alert variant="info">
-                    <strong>Your booking:</strong> {facilityData.facilityName} on{" "}
-                    {useCustomTime ? customDate : selectedSlot!.slotDate} from{" "}
-                    {useCustomTime ? customStartTime : selectedSlot!.startTime} to{" "}
-                    {useCustomTime ? customEndTime : selectedSlot!.endTime}
-                    {useCustomTime && " (custom time)"}
-                </Alert>
-            )}
-
-            <div className="d-flex gap-2">
-                <Button
-                    variant="primary"
-                    size="lg"
-                    onClick={handleSubmit}
-                    disabled={
-                        submitting ||
-                        !activity.trim() ||
-                        (!useCustomTime && !selectedSlot) ||
-                        (useCustomTime && (!customDate || !customStartTime || !customEndTime))
-                    }
-                >
-                    {submitting ? "Submitting..." : "Submit Booking Request"}
-                </Button>
-                <Button
-                    variant="outline-secondary"
-                    size="lg"
-                    onClick={() => navigate("/")}
-                >
-                    Cancel
-                </Button>
-            </div>
+                            )}
+                        </Card.Body>
+                    </Card>
+                </Col>
+            </Row>
         </div>
     );
 }
