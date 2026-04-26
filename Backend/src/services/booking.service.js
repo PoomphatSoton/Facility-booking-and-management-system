@@ -6,7 +6,7 @@ const { pool } = require('../config/db');
  * @param {number} daysAhead - 7
  * @returns {Array} slotDate, startTime, endTime, available
  */
-const getAvailableSlots = async (facilityId, daysAhead = 7) => {
+const getAvailableSlots = async (facilityId, daysAhead = 30) => {
     // 1. First verify that the venue exists and retrieve max_people at the same time
     const facilityResult = await pool.query(
         `SELECT facility_id, name, max_people 
@@ -109,7 +109,6 @@ const submitBookingRequest = async ({
                                         startTime,
                                         endTime,
                                         intendedActivity,
-                                        customTime = false,
                                     }) => {
     // 1. Find the member_id corresponding to the current user
     const memberResult = await pool.query(
@@ -130,29 +129,14 @@ const submitBookingRequest = async ({
         throw new Error('FACILITY_NOT_FOUND');
     }
 
-    if (!customTime) {
-        const slotResult = await pool.query(
-            `SELECT slot_time_id FROM public.facility_slot_times
-       WHERE facility_id = $1 
-         AND slot_date = $2 
-         AND slot_start_time = $3 
-         AND slot_end_time = $4
-         AND slot_date >= CURRENT_DATE`,
-            [facilityId, slotDate, startTime, endTime]
-        );
-        if (slotResult.rows.length === 0) {
-            throw new Error('SLOT_NOT_AVAILABLE');
-        }
-    } else {
-        if (startTime >= endTime) {
-            throw new Error('INVALID_TIME_RANGE');
-        }
-        if (startTime < '08:00' || endTime > '22:00') {
-            throw new Error('OUTSIDE_OPENING_HOURS');
-        }
-        if (slotDate < new Date().toISOString().slice(0, 10)) {
-            throw new Error('DATE_IN_PAST');
-        }
+    if (startTime >= endTime) {
+        throw new Error('INVALID_TIME_RANGE');
+    }
+
+    const todayLocal = new Date();
+    const todayStr = `${todayLocal.getFullYear()}-${String(todayLocal.getMonth() + 1).padStart(2, '0')}-${String(todayLocal.getDate()).padStart(2, '0')}`;
+    if (slotDate < todayStr) {
+        throw new Error('DATE_IN_PAST');
     }
 
     // 4. Check whether this member already has a pending request for the same time slot (to prevent duplicate submissions)

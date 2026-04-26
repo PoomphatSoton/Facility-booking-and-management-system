@@ -90,17 +90,6 @@ export default function NewBooking() {
         });
     }, [facilityData, selectedDate, startTime, endTime]);
 
-    const isCustomTime = (): boolean => {
-        if (!facilityData || !selectedDate || !startTime || !endTime) return false;
-        const match = facilityData.slots.find(
-            (s) =>
-                s.slotDate === selectedDate &&
-                s.startTime === startTime &&
-                s.endTime === endTime
-        );
-        return !match;
-    };
-
     const handleSubmit = async () => {
         if (!facilityData) return;
 
@@ -130,7 +119,6 @@ export default function NewBooking() {
                 startTime,
                 endTime,
                 intendedActivity: activity.trim(),
-                customTime: isCustomTime(),
             });
 
             if (response.status === "ok") {
@@ -219,7 +207,8 @@ export default function NewBooking() {
         endTime &&
         startTime < endTime &&
         activity.trim() &&
-        !submitting;
+        !submitting &&
+        (!spotsInfo || spotsInfo.available);
 
     return (
         <div className="container py-4" style={{ maxWidth: "1100px" }}>
@@ -258,6 +247,11 @@ export default function NewBooking() {
                                     type="date"
                                     value={selectedDate}
                                     min={today}
+                                    max={(() => {
+                                        const d = new Date();
+                                        d.setDate(d.getDate() + 29);
+                                        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+                                    })()}
                                     onChange={(e) => {
                                         setSelectedDate(e.target.value);
                                         setStartTime("");
