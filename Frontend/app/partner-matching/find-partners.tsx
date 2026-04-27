@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { Link } from "react-router";
 import "./partner-matching.css";
 
 type PartnerItem = {
@@ -160,12 +161,12 @@ export default function FindPartners() {
               >
                 Send Match Request
               </button>
-              <button
+             <Link
+                to={`/find-partners/${partner.id}`}
                 className="partner-secondary-btn"
-                onClick={() => alert(`Viewing ${partner.name}'s profile`)}
-              >
+            >
                 View Profile
-              </button>
+              </Link>
             </div>
           </div>
         ))}
