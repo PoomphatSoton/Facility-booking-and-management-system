@@ -6,6 +6,10 @@ import {
 
 export default [
   route("", "facility/facility-list.tsx"),
+  route("equipment-reports", "equipment-report/equipment-report-list.tsx"),
+  route("equipment-reports-admin", "equipment-report/equipment-report-admin.tsx"),
+  route("find-partners", "partner-matching/find-partners.tsx"),
+  route("partner-requests", "partner-matching/partner-requests.tsx"),
   layout("auth/layout.tsx", [
     route("auth/login", "auth/login.tsx"),
     route("auth/register", "auth/register.tsx"),
