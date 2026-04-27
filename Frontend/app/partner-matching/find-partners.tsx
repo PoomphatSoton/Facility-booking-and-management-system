@@ -1,9 +1,11 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router";
+import { partnerMatchingService } from "../services/partner-matching.service";
 import "./partner-matching.css";
 
 type PartnerItem = {
   id: number;
+  memberId: number;
   name: string;
   sport: string;
   skillLevel: string;
@@ -15,6 +17,7 @@ type PartnerItem = {
 const mockPartners: PartnerItem[] = [
   {
     id: 1,
+    memberId: 1,
     name: "Alex Chen",
     sport: "Badminton",
     skillLevel: "Intermediate",
@@ -24,6 +27,7 @@ const mockPartners: PartnerItem[] = [
   },
   {
     id: 2,
+    memberId: 2,
     name: "Sarah Khan",
     sport: "Football",
     skillLevel: "Beginner",
@@ -33,6 +37,7 @@ const mockPartners: PartnerItem[] = [
   },
   {
     id: 3,
+    memberId: 3,
     name: "James Lee",
     sport: "Squash",
     skillLevel: "Advanced",
@@ -42,6 +47,7 @@ const mockPartners: PartnerItem[] = [
   },
   {
     id: 4,
+    memberId: 4,
     name: "Emily Wong",
     sport: "Tennis",
     skillLevel: "Intermediate",
@@ -55,6 +61,7 @@ export default function FindPartners() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedSport, setSelectedSport] = useState("All");
   const [selectedSkill, setSelectedSkill] = useState("All");
+  const [sendingMemberId, setSendingMemberId] = useState<number | null>(null);
 
   const sports = useMemo(
     () => ["All", ...new Set(mockPartners.map((partner) => partner.sport))],
@@ -83,6 +90,21 @@ export default function FindPartners() {
       return matchesSport && matchesSkill && matchesSearch;
     });
   }, [searchQuery, selectedSport, selectedSkill]);
+
+  const handleSendMatchRequest = async (partner: PartnerItem) => {
+    try {
+      setSendingMemberId(partner.memberId);
+
+      await partnerMatchingService.createMatchRequest(partner.memberId);
+
+      alert(`Match request sent to ${partner.name}`);
+    } catch (error) {
+      console.error(error);
+      alert("Failed to send match request. Please make sure you are logged in.");
+    } finally {
+      setSendingMemberId(null);
+    }
+  };
 
   return (
     <main className="partner-matching-page">
@@ -155,16 +177,18 @@ export default function FindPartners() {
             <div className="partner-card-actions">
               <button
                 className="partner-primary-btn"
-                onClick={() =>
-                  alert(`Mock match request sent to ${partner.name}`)
-                }
+                onClick={() => void handleSendMatchRequest(partner)}
+                disabled={sendingMemberId === partner.memberId}
               >
-                Send Match Request
+                {sendingMemberId === partner.memberId
+                  ? "Sending..."
+                  : "Send Match Request"}
               </button>
-             <Link
+
+              <Link
                 to={`/find-partners/${partner.id}`}
                 className="partner-secondary-btn"
-            >
+              >
                 View Profile
               </Link>
             </div>

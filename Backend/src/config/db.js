@@ -6,8 +6,8 @@ const { Pool } = require('pg');
 const sslConfig =
   process.env.DB_SSL === 'true'
     ? {
-        rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED !== 'false',
-      }
+      rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED !== 'false',
+    }
     : false;
 
 const buildPoolConfig = () => {
@@ -139,7 +139,7 @@ const initDb = async () => {
       CONSTRAINT member_skills_skill_level_check CHECK (skill_level IN ('beginner', 'intermediate', 'advanced'))
     )
   `);
- 
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS public.member_sport_preferences (
       member_sport_preference_id SERIAL PRIMARY KEY,
@@ -265,15 +265,30 @@ const initDb = async () => {
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS public.matching_requests (
-      request_matching_id SERIAL PRIMARY KEY,
-      sender_id INTEGER REFERENCES public.members(member_id) ON DELETE SET NULL,
-      receiver_id INTEGER REFERENCES public.members(member_id) ON DELETE SET NULL,
-      booking_id INTEGER REFERENCES public.bookings(booking_id) ON DELETE CASCADE,
-      status TEXT NOT NULL DEFAULT 'open',
-      created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-      CONSTRAINT matching_requests_status_check CHECK (status IN ('open', 'matched'))
-    )
+     request_matching_id SERIAL PRIMARY KEY,
+     sender_id INTEGER REFERENCES public.members(member_id) ON DELETE SET NULL,
+     receiver_id INTEGER REFERENCES public.members(member_id) ON DELETE SET NULL,
+     booking_id INTEGER REFERENCES public.bookings(booking_id) ON DELETE CASCADE,
+     status TEXT NOT NULL DEFAULT 'pending',
+     created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+     CONSTRAINT matching_requests_status_check CHECK (status IN ('pending', 'accepted', 'rejected'))
+   )
   `);
+  await pool.query(`
+  ALTER TABLE public.matching_requests
+  ALTER COLUMN status SET DEFAULT 'pending'
+`);
+
+  await pool.query(`
+  ALTER TABLE public.matching_requests
+  DROP CONSTRAINT IF EXISTS matching_requests_status_check
+`);
+
+  await pool.query(`
+  ALTER TABLE public.matching_requests
+  ADD CONSTRAINT matching_requests_status_check
+  CHECK (status IN ('pending', 'accepted', 'rejected'))
+`);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS public.equipment_reports (
