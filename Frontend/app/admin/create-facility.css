@@ -1,0 +1,115 @@
+.create-facility-page {
+    padding: 1.5rem;
+    background-color: #f3f4f6;
+    min-height: 100vh;
+}
+
+.create-facility-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    max-width: 48rem;
+    margin: 0 auto 1.5rem;
+}
+
+.create-facility-header h1 {
+    font-size: 1.75rem;
+    font-weight: 700;
+    margin: 0;
+}
+
+.create-facility-form {
+    max-width: 48rem;
+    margin: 0 auto;
+    display: grid;
+    gap: 1.25rem;
+}
+
+.create-facility-section {
+    background: #ffffff;
+    border: 1px solid #e5e7eb;
+    border-radius: 0.75rem;
+    padding: 1.25rem;
+    display: grid;
+    gap: 1rem;
+}
+
+.create-facility-section h2 {
+    font-size: 1.05rem;
+    font-weight: 600;
+    margin: 0;
+    color: #1e293b;
+}
+
+.create-facility-section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.create-facility-field {
+    display: grid;
+    gap: 0.35rem;
+}
+
+.create-facility-field label {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: #374151;
+}
+
+.create-facility-image-preview {
+    width: 100%;
+    max-height: 200px;
+    object-fit: cover;
+    border-radius: 0.5rem;
+    border: 1px solid #e5e7eb;
+}
+
+.create-facility-opening-row {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+}
+
+.create-facility-opening-day {
+    flex: 0 0 7rem;
+}
+
+.create-facility-time-picker {
+    flex: 0 0 7rem;
+    width: 7rem;
+}
+
+.create-facility-opening-row span {
+    color: #64748b;
+    font-size: 0.875rem;
+    white-space: nowrap;
+}
+
+.create-facility-submit-row {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.75rem;
+    padding-bottom: 1.5rem;
+}
+
+@media (max-width: 576px) {
+    .create-facility-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.75rem;
+    }
+
+    .create-facility-opening-row {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .create-facility-opening-day,
+    .create-facility-opening-row .form-control[type="time"] {
+        flex: 1 1 auto;
+        width: 100%;
+    }
+}

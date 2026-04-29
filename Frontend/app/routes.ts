@@ -18,6 +18,10 @@ export default [
   route("find-partners", "partner-matching/find-partners.tsx"),
   route("partner-requests", "partner-matching/partner-requests.tsx"),
   route("staff/pending", "staff/pending-requests.tsx"),
+  route("staff/upcoming", "staff/upcoming-bookings.tsx"),
+  route("admin", "admin/admin-page.tsx"),
+  route("admin/facility/create", "admin/create-facility.tsx", { id: "admin-facility-create" }),
+  route("admin/facility/edit/:facilityId", "admin/create-facility.tsx", { id: "admin-facility-edit" }),
   layout("auth/layout.tsx", [
     route("auth/login", "auth/login.tsx"),
     route("auth/register", "auth/register.tsx"),
