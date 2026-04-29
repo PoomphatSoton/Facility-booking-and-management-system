@@ -84,7 +84,7 @@ const getFacilityCards = async () => {
   );
 
   const facilities = facilityResult.rows;
-//   console.log("Get facilities", facilities);
+  //   console.log("Get facilities", facilities);
   const facilityIds = facilities.map((facility) => facility.facility_id);
 
   const today = new Date();
@@ -116,8 +116,115 @@ const getFacilityCards = async () => {
   });
 };
 
+const updateFacility = async (facilityId, data) => {
+  const client = await pool.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    const {
+      name,
+      description,
+      usageGuideline,
+      maxPeople,
+      schedules = [],
+      slotTimes = [],
+    } = data;
+// Update facility details
+    const facilityResult = await client.query(
+      `
+      UPDATE public.facilities
+      SET
+        name = $1,
+        description = $2,
+        usage_guideline = $3,
+        max_people = $4
+      WHERE facility_id = $5
+      RETURNING *
+      `,
+      [
+        name,
+        description ?? null,
+        usageGuideline ?? null,
+        maxPeople,
+        facilityId,
+      ]
+    );
+
+    if (facilityResult.rows.length === 0) {
+      throw new Error('Facility not found');
+    }
+
+// delete old schedules and insert new one
+    await client.query(
+      `
+      DELETE FROM public.facility_schedules
+      WHERE facility_id = $1
+      `,
+      [facilityId]
+    );
+
+    for (const schedule of schedules) {
+      await client.query(
+        `
+        INSERT INTO public.facility_schedules
+          (facility_id, day_of_week, start_time, end_time)
+        VALUES ($1, $2, $3, $4)
+        `,
+        [
+          facilityId,
+          schedule.dayOfWeek,
+          schedule.startTime,
+          schedule.endTime,
+        ]
+      );
+    }
+
+    await client.query('COMMIT');
+
+    return facilityResult.rows[0];
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+};
+
+const deleteFacility = async (facilityId) => {
+  const client = await pool.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    const result = await client.query(
+      `
+      DELETE FROM public.facilities
+      WHERE facility_id = $1
+      RETURNING *
+      `,
+      [facilityId]
+    );
+
+    if (result.rows.length === 0) {
+      throw new Error('Facility not found');
+    }
+
+    await client.query('COMMIT');
+
+    return result.rows[0];
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+};
+
 module.exports = {
   getSlotTime,
   getAvailableTime,
   getFacilityCards,
+  updateFacility,
+  deleteFacility
 };

@@ -159,7 +159,6 @@ const initDb = async () => {
     )
   `);
 
-  // Backfill schema for existing databases created before max_people was introduced.
   await pool.query(`
     ALTER TABLE public.facilities
     ADD COLUMN IF NOT EXISTS max_people INTEGER NOT NULL DEFAULT 1
@@ -176,7 +175,6 @@ const initDb = async () => {
     )
   `);
 
-  // Backfill schema for existing databases that still include slot_duration.
   await pool.query(`
     ALTER TABLE public.facility_schedules
     DROP COLUMN IF EXISTS slot_duration
@@ -196,7 +194,6 @@ const initDb = async () => {
     )
   `);
 
-  // Backfill schema for existing databases before slot_date was introduced.
   await pool.query(`
     ALTER TABLE public.facility_slot_times
     ADD COLUMN IF NOT EXISTS slot_date DATE NOT NULL DEFAULT CURRENT_DATE

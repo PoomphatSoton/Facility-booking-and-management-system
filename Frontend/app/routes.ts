@@ -20,6 +20,10 @@ export default [
   route("booking/my", "booking/my-bookings.tsx"),
   route("booking/notifications", "booking/notifications.tsx"),
   route("staff/pending", "staff/pending-requests.tsx"),
+  route("staff/upcoming", "staff/upcoming-bookings.tsx"),
+  route("admin", "admin/admin-page.tsx"),
+  route("admin/facility/create", "admin/create-facility.tsx", { id: "admin-facility-create" }),
+  route("admin/facility/edit/:facilityId", "admin/create-facility.tsx", { id: "admin-facility-edit" }),
   layout("auth/layout.tsx", [
     route("auth/login", "auth/login.tsx"),
     route("auth/register", "auth/register.tsx"),

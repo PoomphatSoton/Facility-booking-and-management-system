@@ -38,6 +38,9 @@ export default function AppNavbar() {
             <Nav.Link as={Link} to="/staff/upcoming">
               Manage Sessions
             </Nav.Link>
+            <Nav.Link as={Link} to="/admin">
+              Admin
+            </Nav.Link>
             <Button variant="outline-danger" onClick={handleLogout}>
               Logout
             </Button>
