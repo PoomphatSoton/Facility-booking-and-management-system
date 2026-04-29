@@ -205,7 +205,7 @@ const updatePasswordById = async (id, passwordHash) => {
       UPDATE public.users
       SET password_hash = $2
       WHERE id = $1
-      RETURNING id, email, password_hash, first_name, last_name, date_of_birth, address
+      RETURNING id, email, password_hash, first_name, last_name, date_of_birth, address, role, account_status
     `,
     [id, passwordHash]
   );
@@ -213,14 +213,15 @@ const updatePasswordById = async (id, passwordHash) => {
   return rows[0] ? mapUser(rows[0]) : null;
 };
 
-const create = async ({ email, passwordHash, firstName, lastName, dateOfBirth, address }) => {
+const create = async ({ email, passwordHash, firstName, lastName, dateOfBirth, address, role = 'member' }) => {
   const normalizedEmail = email.trim().toLowerCase();
   console.log("Email = ", email)
   const { rows } = await pool.query(
     `
-      INSERT INTO public.users (email, password_hash, first_name, last_name, date_of_birth, address)
-      VALUES ($1, $2, $3, $4, $5, $6)
-      RETURNING id, email, password_hash, first_name, last_name, date_of_birth, address
+      INSERT INTO public.users (email, password_hash, first_name, last_name, date_of_birth, address, role)
+
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      RETURNING id, email, password_hash, first_name, last_name, date_of_birth, address, role
     `,
     [
       normalizedEmail,
@@ -277,7 +278,7 @@ const updateProfileById = async (id, { firstName, lastName, dateOfBirth, address
           date_of_birth = $4,
           address = $5
       WHERE id = $1
-      RETURNING id, email, password_hash, first_name, last_name, date_of_birth, address
+      RETURNING id, email, password_hash, first_name, last_name, date_of_birth, address, role, account_status
     `,
     [
       id,

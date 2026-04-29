@@ -5,7 +5,7 @@ import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
 import type { FacilityAdminItem } from "./admin-page";
 import "./create-facility.css";
-import { facilityService, type UpdateFacilityPayload } from "~/services/facility.service";
+import { facilityService, type FacilityPayload } from "~/services/facility.service";
 
 const timeStrToDate = (t: string): Date => {
     const [h, m] = t.split(":").map(Number);
@@ -98,7 +98,7 @@ export default function CreateFacility() {
         }));
     };
 
-    type DayOfWeek = UpdateFacilityPayload["schedules"][number]["dayOfWeek"];
+    type DayOfWeek = FacilityPayload["schedules"][number]["dayOfWeek"];
 
     const dayToApi = (day: string): DayOfWeek => {
         const map: Record<string, DayOfWeek> = {
@@ -134,7 +134,7 @@ export default function CreateFacility() {
             if (isEdit && facilityId) {
                 await facilityService.updateFacility(Number(facilityId), payload);
             } else {
-                console.log("Create facility:", payload, imageFile);
+                await facilityService.createFacility(payload);
             }
 
             navigate("/admin");

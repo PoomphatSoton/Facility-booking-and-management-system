@@ -37,7 +37,6 @@ const getSlotTime = async ({ facilityIds, slotDate }) => {
 const getAvailableTime = async ({ facilityIds }) => {
   if (!facilityIds.length) return new Map();
 
-  // Fetch all days at once, split today vs other days in getFacilityCards
   const result = await pool.query(
     `
       SELECT
@@ -53,7 +52,6 @@ const getAvailableTime = async ({ facilityIds }) => {
     [facilityIds]
   );
 
-  // Map<facilityId, Array<{day, startTime, endTime}>>
   const availableMap = new Map();
 
   for (const row of result.rows) {
@@ -84,7 +82,6 @@ const getFacilityCards = async () => {
   );
 
   const facilities = facilityResult.rows;
-  //   console.log("Get facilities", facilities);
   const facilityIds = facilities.map((facility) => facility.facility_id);
 
   const today = new Date();
@@ -221,10 +218,70 @@ const deleteFacility = async (facilityId) => {
   }
 };
 
+const createFacility = async (data) => {
+  console.log("createFacility data = ", data);
+  const client = await pool.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    const {
+      name,
+      description,
+      usageGuideline,
+      maxPeople,
+      schedules = [],
+    } = data;
+
+    const facilityResult = await client.query(
+      `
+      INSERT INTO public.facilities
+        (name, description, usage_guideline, max_people)
+      VALUES ($1, $2, $3, $4)
+      RETURNING *
+      `,
+      [
+        name,
+        description ?? null,
+        usageGuideline ?? null,
+        maxPeople,
+      ]
+    );
+
+    const facility = facilityResult.rows[0];
+
+    for (const schedule of schedules) {
+      await client.query(
+        `
+        INSERT INTO public.facility_schedules
+          (facility_id, day_of_week, start_time, end_time)
+        VALUES ($1, $2, $3, $4)
+        `,
+        [
+          facility.facility_id,
+          schedule.dayOfWeek,
+          schedule.startTime,
+          schedule.endTime,
+        ]
+      );
+    }
+
+    await client.query('COMMIT');
+
+    return facility;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+};
+
 module.exports = {
   getSlotTime,
   getAvailableTime,
   getFacilityCards,
   updateFacility,
-  deleteFacility
+  deleteFacility,
+  createFacility
 };

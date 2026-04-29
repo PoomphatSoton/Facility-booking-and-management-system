@@ -7,6 +7,9 @@
 .facility-page-header {
     margin: 0 auto 1.5rem;
     max-width: 72rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
 }
 
 .facility-page-header h1 {

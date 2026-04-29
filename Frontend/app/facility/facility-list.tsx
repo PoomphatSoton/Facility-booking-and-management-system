@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router";
+import { useNavigate, useLocation } from "react-router";
 import FacilityCard from "./facility-card";
 import "./facility.css";
+import "../admin/admin-page.css";
 import { Alert, Button, Form } from "react-bootstrap";
 import { TIME_RANGES } from "./facility.mock";
 import { facilityService } from "~/services/facility.service";
@@ -54,8 +55,10 @@ const mapCard = (card: FacilityCardItem): FacilityItem => {
     };
 };
 
-export default function FacilityList({ isAdmin = false }: { isAdmin?: boolean }) {
+export default function FacilityList() {
     const navigate = useNavigate();
+    const { pathname } = useLocation();
+    const isAdmin = pathname.startsWith("/admin");
     const [facilities, setFacilities] = useState<FacilityItem[]>([]);
     const [showFetchAlert, setShowFetchAlert] = useState(false);
     const [searchQuery, setSearchQuery] = useState("");
@@ -119,22 +122,15 @@ export default function FacilityList({ isAdmin = false }: { isAdmin?: boolean })
     return (
         <main className="facility-page">
             <div className="facility-page-header">
-                {isAdmin ? (
-                    <div className="admin-header-row">
-                        <div>
-                            <h1>Manage Facilities</h1>
-                            <p>Create, edit, or remove sport centre facilities.</p>
-                        </div>
-                        <Button variant="primary" onClick={() => navigate("/admin/facility/create")}>
-                            + Create Facility
-                        </Button>
-                    </div>
-                ) : (
-                    <>
+                    <div>
                         <h1>Browse Facilities</h1>
                         <p>Find and reserve sports facilities easily</p>
-                    </>
-                )}
+                    </div>
+                    {isAdmin && (
+                        <Button variant="primary" onClick={() => navigate("/admin/facility/create")}>
+                            Create Facility
+                        </Button>
+                    )}
             </div>
 
             <div className="facility-toolbar">
@@ -194,38 +190,26 @@ export default function FacilityList({ isAdmin = false }: { isAdmin?: boolean })
 
             <div className="facility-list-container">
                 {filteredFacilities.map((facility) => (
-                    true ? (
-                        <div key={facility.facilityId} className="admin-card-wrapper">
-                            <FacilityCard
-                                facilityId={facility.facilityId}
-                                name={facility.name}
-                                description={facility.description}
-                                currentOpening={facility.currentOpening}
-                                otherOpenings={facility.otherOpenings}
-                                slotToday={facility.slotToday}
-                                slotByDate={facility.slotByDate}
-                                maxPeople={facility.maxPeople}
-                                usageGuidelines={facility.usageGuidelines}
-                                imageUrl={facility.imageUrl}
-                            />
+                    <div>
+                        {isAdmin ? (
                             <div className="admin-card-actions">
                                 <Button
-                                    variant="outline-warning"
+                                    variant="warning"
                                     size="sm"
                                     onClick={() => navigate(`/admin/facility/edit/${facility.facilityId}`, { state: facility })}
                                 >
                                     Edit
                                 </Button>
                                 <Button
-                                    variant="outline-danger"
+                                    variant="danger"
                                     size="sm"
                                     onClick={() => handleDelete(facility.facilityId)}
                                 >
                                     Delete
                                 </Button>
                             </div>
-                        </div>
-                    ) : (
+                        ) : null}
+                    
                         <FacilityCard
                             key={facility.facilityId}
                             facilityId={facility.facilityId}
@@ -239,7 +223,7 @@ export default function FacilityList({ isAdmin = false }: { isAdmin?: boolean })
                             usageGuidelines={facility.usageGuidelines}
                             imageUrl={facility.imageUrl}
                         />
-                    )
+                    </div>
                 ))}
             </div>
 

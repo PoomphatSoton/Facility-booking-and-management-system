@@ -6,6 +6,7 @@ export interface ApiError {
 }
 
 export type RegistrationStep = "credentials" | "otp" | "details";
+export type UserRole = "admin" | "member" | "staff";
 
 export interface User {
   id: string;
@@ -14,6 +15,7 @@ export interface User {
   lastName: string;
   dateOfBirth: string;
   address: string;
+  role: "member" | "staff" | "admin";
 }
 
 export interface RegisterCredentialsRequest {
