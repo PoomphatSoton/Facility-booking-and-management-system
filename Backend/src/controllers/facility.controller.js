@@ -71,8 +71,28 @@ const deleteFacility = async (req, res) => {
     });
   }
 };
+
+const createFacility = async (req, res) => {
+  try {
+    const createdFacility = await facilityService.createFacility(req.body);
+
+    return res.status(201).json({
+      status: 'ok',
+      message: 'Facility created successfully',
+      data: createdFacility,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      status: 'error',
+      message: 'failed to create facility',
+      detail: error.message,
+    });
+  }
+};
+
 module.exports = {
   getFacilityCards,
   updateFacility,
-  deleteFacility
+  deleteFacility,
+  createFacility
 };

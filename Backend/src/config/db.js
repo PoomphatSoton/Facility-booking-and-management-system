@@ -101,13 +101,6 @@ const initDb = async () => {
   `);
 
   await pool.query(`
-    CREATE TABLE IF NOT EXISTS public.staff_roles (
-      role_id SERIAL PRIMARY KEY,
-      role_name VARCHAR(100) NOT NULL UNIQUE
-    )
-  `);
-
-  await pool.query(`
     CREATE TABLE IF NOT EXISTS public.members (
       member_id SERIAL PRIMARY KEY,
       user_id INTEGER NOT NULL UNIQUE REFERENCES public.users(id) ON DELETE CASCADE,
@@ -124,8 +117,6 @@ const initDb = async () => {
     CREATE TABLE IF NOT EXISTS public.staff (
       staff_id SERIAL PRIMARY KEY,
       user_id INTEGER NOT NULL UNIQUE REFERENCES public.users(id) ON DELETE CASCADE,
-      role_id INTEGER REFERENCES public.staff_roles(role_id) ON DELETE SET NULL,
-      department_id INTEGER,
       created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
     )
   `);

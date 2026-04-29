@@ -1,7 +1,7 @@
 import { api } from "./http";
 import type { FacilityCardsResponse, FacilityCardItem } from "./types";
 
-export type UpdateFacilityPayload = {
+export type FacilityPayload = {
   name: string;
   description: string;
   usageGuideline: string;
@@ -19,6 +19,12 @@ export type UpdateFacilityPayload = {
   }>;
 };
 
+export type CreateFacilityResponse = {
+  status: "ok";
+  message: string;
+  data: FacilityCardItem;
+};
+
 export type UpdateFacilityResponse = {
   status: "ok";
   message: string;
@@ -33,7 +39,7 @@ export const facilityService = {
 
   updateFacility: async (
     facilityId: number,
-    payload: UpdateFacilityPayload
+    payload: FacilityPayload
   ) => {
     const { data } = await api.put<UpdateFacilityResponse>(`/facilities/${facilityId}`, payload);
 
@@ -45,4 +51,13 @@ export const facilityService = {
 
     return data;
   },
+
+  createFacility: async (payload: FacilityPayload) => {
+  const { data } = await api.post<CreateFacilityResponse>(
+    "/facilities",
+    payload
+  );
+
+  return data;
+},
 };

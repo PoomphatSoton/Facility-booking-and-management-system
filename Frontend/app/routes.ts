@@ -19,9 +19,24 @@ export default [
   route("partner-requests", "partner-matching/partner-requests.tsx"),
   route("staff/pending", "staff/pending-requests.tsx"),
   route("staff/upcoming", "staff/upcoming-bookings.tsx"),
-  route("admin", "admin/admin-page.tsx"),
-  route("admin/facility/create", "admin/create-facility.tsx", { id: "admin-facility-create" }),
-  route("admin/facility/edit/:facilityId", "admin/create-facility.tsx", { id: "admin-facility-edit" }),
+
+  layout("routes/admin-layout.tsx", [
+    route("admin", "admin/admin-page.tsx"),
+    route("admin/facility/create", "admin/create-facility.tsx", {
+      id: "admin-facility-create",
+    }),
+    route("admin/facility/edit/:facilityId", "admin/create-facility.tsx", {
+      id: "admin-facility-edit",
+    }),
+    route("admin/staff", "staff-management/staff-mangement.tsx"),
+    route("admin/staff/create", "staff-management/create-staff.tsx", {
+      id: "admin-staff-create",
+    }),
+    route("admin/staff/edit/:staffId", "staff-management/create-staff.tsx", {
+      id: "admin-staff-edit",
+    }),
+  ]),
+
   layout("auth/layout.tsx", [
     route("auth/login", "auth/login.tsx"),
     route("auth/register", "auth/register.tsx"),
