@@ -1,7 +1,6 @@
 const facilityService = require('../services/facility.service');
 
 const getFacilityCards = async (req, res) => {
-  console.log('当前用户:', req.user);
   try {
     const cards = await facilityService.getFacilityCards();
     return res.status(200).json({
