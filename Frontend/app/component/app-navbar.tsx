@@ -3,6 +3,7 @@ import { Button, Container, Nav, Navbar } from "react-bootstrap";
 import { authService } from "~/services/auth.service";
 import { APP_BRAND_NAME } from "~/constants/app.constants";
 import { useAuth } from "~/auth/auth-middleware";
+import NotificationBell from "~/nofication/notification";
 
 export default function AppNavbar() {
   const navigate = useNavigate();
@@ -48,20 +49,18 @@ export default function AppNavbar() {
                 <Nav.Link as={Link} to="/booking/my">
                   My Bookings
                 </Nav.Link>
-                <Nav.Link as={Link} to="/booking/notifications">
-                  Notifications
-                </Nav.Link>
-                <Nav.Link as={Link} to="/staff/pending">
-                  Staff Dashboard
-                </Nav.Link>
-                <Nav.Link as={Link} to="/staff/upcoming">
-                  Manage Sessions
-                </Nav.Link>
+                <NotificationBell />
               </>
             )}
 
             { isStaff && (
               <>
+                <Nav.Link as={Link} to="/staff">
+                  Staff Dashboard
+                </Nav.Link>
+                <Nav.Link as={Link} to="/staff/upcoming">
+                  Manage Sessions
+                </Nav.Link>
               </>
             )}
 
