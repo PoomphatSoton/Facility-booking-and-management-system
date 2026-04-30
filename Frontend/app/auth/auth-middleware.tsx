@@ -1,6 +1,8 @@
 import { createContext, useContext, useEffect, useState } from "react";
-import { authService } from "../services/auth.service";
-import type { User } from "../services/types";
+import { onAuthStateChanged, type User as FirebaseUser } from "firebase/auth";
+import { firebaseAuth } from "~/config/firebase";
+import { api } from "~/services/http";
+import type { User } from "~/services/types";
 
 const AuthContext = createContext<{
   user: User | null;
@@ -12,16 +14,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    authService.checkLogin()
-      .then((session) => {
-        setUser(session.user);
-      })
-      .catch(() => {
-        setUser(null);
-      })
-      .finally(() => {
-        setLoading(false);
-      });
+    const unsubscribe = onAuthStateChanged(
+      firebaseAuth,
+      async (firebaseUser: FirebaseUser | null) => {
+        if (!firebaseUser || !firebaseUser.emailVerified) {
+          setUser(null);
+          setLoading(false);
+          return;
+        }
+
+        try {
+          await firebaseUser.getIdToken(true);
+
+          const { data } = await api.get<{ user: User }>("/auth/me");
+          setUser(data.user);
+        } catch {
+          setUser(null);
+        } finally {
+          setLoading(false);
+        }
+      },
+    );
+
+    return () => unsubscribe();
   }, []);
 
   return (
