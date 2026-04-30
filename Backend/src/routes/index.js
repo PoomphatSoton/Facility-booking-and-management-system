@@ -5,7 +5,6 @@ const facilityRoutes = require('./facility.routes');
 const bookingRoutes = require('./booking.routes');
 const equipmentReportRoutes = require('./equipment-report.routes');
 const partnerMatchingRoutes = require('./partner-matching.routes');
-const bookingRoutes = require('./booking.routes');
 const staffManagementRoutes = require('./staff-management.route');
 
 const router = express.Router();
