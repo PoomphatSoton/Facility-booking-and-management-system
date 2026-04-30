@@ -178,7 +178,7 @@ export default function FacilityCard({
                     <ul className="facility-guideline-list">
                         {openings.map((o, i) => (
                             <li key={`${o.day}-${i}`}>
-                                {`${o.day} ${o.startTime}–${o.endTime}`}
+                                {`${o.day}  ${fmtTime(o.startTime)} – ${fmtTime(o.endTime)}`}
                             </li>
                         ))}
                     </ul>

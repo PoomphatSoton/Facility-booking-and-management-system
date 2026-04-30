@@ -1,11 +1,16 @@
+// ==================== Authentication ====================
 export interface ApiError {
   message: string;
   nextStep?: RegistrationStep;
   state?: RegistrationStep;
-  registrationId?: string;
 }
 
-export type RegistrationStep = "credentials" | "otp" | "details";
+export type RegistrationStep =
+  | "credentials"
+  | "verifyEmail"
+  | "details"
+  | "complete";
+
 export type UserRole = "admin" | "member" | "staff";
 
 export interface User {
@@ -15,72 +20,26 @@ export interface User {
   lastName: string;
   dateOfBirth: string;
   address: string;
-  role: "member" | "staff" | "admin";
+  role: UserRole;
 }
 
 export interface RegisterCredentialsRequest {
+  firebaseUid: string;
   email: string;
-  password: string;
 }
 
 export interface RegisterCredentialsResponse {
-  registrationId: string;
   nextStep: RegistrationStep;
   message: string;
-  delivery?: {
-    accepted?: string[];
-    rejected?: string[];
-    response?: string;
-  };
-}
-
-export interface VerifyOtpRequest {
-  registrationId: string;
-  otp: string;
-}
-
-export interface ResendOtpRequest {
-  registrationId: string;
-}
-
-export interface ResendOtpResponse {
-  registrationId: string;
-  message: string;
-}
-
-export interface VerifyOtpResponse {
-  registrationId: string;
-  nextStep: RegistrationStep;
-  message: string;
-  token: string;
+  user?: User;
 }
 
 export interface CompleteRegisterRequest {
-  registrationId?: string;
   firstName: string;
   lastName: string;
   dateOfBirth: string;
   address: string;
 }
-
-export interface LoginRequest {
-  email: string;
-  password: string;
-}
-
-export type AuthenticatedResponse = {
-  token: string;
-  user: User;
-};
-
-export interface LoginPendingResponse {
-  token: string;
-  nextStep: "details";
-  registrationId: string;
-  message: string;
-}
-
-export type LoginResponse = AuthenticatedResponse | LoginPendingResponse;
 
 export interface CompleteRegisterResponse {
   user: User;
@@ -101,37 +60,10 @@ export interface ForgotPasswordRequestRequest {
 }
 
 export interface ForgotPasswordRequestResponse {
-  resetRequestId: string;
   message: string;
 }
 
-export interface ForgotPasswordVerifyRequest {
-  resetRequestId: string;
-  otp: string;
-}
-
-export interface ForgotPasswordVerifyResponse {
-  resetToken: string;
-  message: string;
-}
-
-export interface ForgotPasswordResetRequest {
-  resetToken: string;
-  newPassword: string;
-}
-
-export interface ForgotPasswordResetResponse {
-  message: string;
-}
-
-export interface ForgotPasswordResendOtpRequest {
-  resetRequestId: string;
-}
-
-export interface ForgotPasswordResendOtpResponse {
-  message: string;
-}
-
+// ==================== Facility ====================
 export interface FacilityAvailableTime {
   day: string;
   startTime: string;
@@ -143,6 +75,7 @@ export interface FacilityCardItem {
   name: string;
   description: string;
   usageGuideline: string | null;
+  imageUrl: string | null;
   maxPeople: number;
   slotDate: string;
   slotToday: string[];

@@ -75,6 +75,7 @@ const getFacilityCards = async () => {
         name,
         description,
         usage_guideline,
+        image_url,
         max_people
       FROM public.facilities
       ORDER BY facility_id ASC
@@ -104,6 +105,7 @@ const getFacilityCards = async () => {
       name: facility.name,
       description: facility.description,
       usageGuideline: facility.usage_guideline,
+      imageUrl: facility.image_url ?? null,
       maxPeople: facility.max_people,
       slotDate,
       slotToday: slotTimesByFacility.get(facility.facility_id) || [],
@@ -123,6 +125,7 @@ const updateFacility = async (facilityId, data) => {
       name,
       description,
       usageGuideline,
+      imageUrl,
       maxPeople,
       schedules = [],
       slotTimes = [],
@@ -135,8 +138,9 @@ const updateFacility = async (facilityId, data) => {
         name = $1,
         description = $2,
         usage_guideline = $3,
-        max_people = $4
-      WHERE facility_id = $5
+        max_people = $4,
+        image_url = $5
+      WHERE facility_id = $6
       RETURNING *
       `,
       [
@@ -144,6 +148,7 @@ const updateFacility = async (facilityId, data) => {
         description ?? null,
         usageGuideline ?? null,
         maxPeople,
+        imageUrl ?? null,
         facilityId,
       ]
     );
@@ -246,6 +251,7 @@ const createFacility = async (data) => {
       name,
       description,
       usageGuideline,
+      imageUrl,
       maxPeople,
       schedules = [],
       slotTimes = [],
@@ -254,14 +260,15 @@ const createFacility = async (data) => {
     const facilityResult = await client.query(
       `
       INSERT INTO public.facilities
-        (name, description, usage_guideline, max_people)
-      VALUES ($1, $2, $3, $4)
+        (name, description, usage_guideline, image_url, max_people)
+      VALUES ($1, $2, $3, $4, $5)
       RETURNING *
       `,
       [
         name,
         description ?? null,
         usageGuideline ?? null,
+        imageUrl ?? null,
         maxPeople,
       ]
     );

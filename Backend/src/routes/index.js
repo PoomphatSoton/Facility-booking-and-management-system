@@ -6,6 +6,8 @@ const bookingRoutes = require('./booking.routes');
 const equipmentReportRoutes = require('./equipment-report.routes');
 const partnerMatchingRoutes = require('./partner-matching.routes');
 const staffManagementRoutes = require('./staff-management.route');
+const notificationRoutes = require('./notification.routes');
+const profileRoutes = require('./profile.route');
 
 const router = express.Router();
 
@@ -17,5 +19,7 @@ router.use('/equipment-reports', equipmentReportRoutes);
 router.use('/partner-matching', partnerMatchingRoutes);
 router.use('/bookings', bookingRoutes);
 router.use('/staff-management', staffManagementRoutes);
+router.use('/notifications', notificationRoutes);
+router.use('/profile', profileRoutes);
 
 module.exports = router;
