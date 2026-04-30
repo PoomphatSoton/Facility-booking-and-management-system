@@ -1,44 +1,50 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
-import { Button, Badge, Table } from "react-bootstrap";
+import { Alert, Button, Badge, Table, Spinner } from "react-bootstrap";
+import { staffManagementService, type StaffMember } from "~/services/staff-management.service";
 import "./staff-mangament.css";
-
-type StaffStatus = "active" | "suspended";
-
-type StaffMember = {
-    id: number;
-    username: string;
-    name: string;
-    facility: string;
-    status: StaffStatus;
-};
-
-const MOCK_STAFF: StaffMember[] = [
-    { id: 1, username: "john.doe", name: "John Doe", facility: "Badminton Court", status: "active" },
-    { id: 2, username: "jane.smith", name: "Jane Smith", facility: "Swimming Pool", status: "active" },
-    { id: 3, username: "mike.jones", name: "Mike Jones", facility: "Football Pitch", status: "suspended" },
-    { id: 4, username: "sara.lee", name: "Sara Lee", facility: "Tennis Court", status: "active" },
-];
 
 export default function StaffManagement() {
     const navigate = useNavigate();
-    const [staffList] = useState<StaffMember[]>(MOCK_STAFF);
+    const [staffList, setStaffList] = useState<StaffMember[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const [errorMessage, setErrorMessage] = useState("");
 
-    const onDelete = (id: number) => {
-        // TODO: call delete API
-        console.log("Delete staff:", id);
+    const fetchStaffList = async () => {
+        try {
+            setErrorMessage("");
+            const response = await staffManagementService.getAllStaff();
+            setStaffList(response.data);
+        } catch {
+            setErrorMessage("Failed to load staff list.");
+        } finally {
+            setIsLoading(false);
+        }
     };
 
-    const ToggleStatus = (id: number, currentStatus: StaffStatus) => {
-        // TODO: call update status API
-        console.log("Toggle status:", id, currentStatus);
-    };
-
-    const fetchStaffList = () => {
-
-    };
-    
     useEffect(() => { void fetchStaffList(); }, []);
+
+    const handleDelete = async (staffId: number) => {
+        if (!window.confirm("Are you sure you want to delete this staff member?")) return;
+        try {
+            await staffManagementService.deleteStaff(staffId);
+            setStaffList((prev) => prev.filter((s) => s.staffId !== staffId));
+        } catch {
+            alert("Failed to delete staff.");
+        }
+    };
+
+    const handleToggleStatus = async (staffId: number, currentStatus: StaffMember["status"]) => {
+        const newStatus = currentStatus === "active" ? "suspended" : "active";
+        try {
+            await staffManagementService.updateStaffStatus(staffId, newStatus);
+            setStaffList((prev) =>
+                prev.map((s) => s.staffId === staffId ? { ...s, status: newStatus } : s)
+            );
+        } catch {
+            alert("Failed to update staff status.");
+        }
+    };
 
     return (
         <main className="staff-page">
@@ -52,70 +58,88 @@ export default function StaffManagement() {
                 </Button>
             </div>
 
+            {errorMessage ? (
+                <Alert variant="danger" className="mb-3" style={{ maxWidth: "72rem", margin: "0 auto 1rem" }}>
+                    {errorMessage}
+                </Alert>
+            ) : null}
+
             <div className="staff-table-wrapper">
-                <Table className="staff-table" hover responsive>
-                    <thead>
-                        <tr>
-                            <th>#</th>
-                            <th>Username</th>
-                            <th>Staff Name</th>
-                            <th>Facility</th>
-                            <th>Status</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {staffList.length === 0 ? (
+                {isLoading ? (
+                    <div className="staff-empty-row">
+                        <Spinner animation="border" size="sm" className="me-2" />
+                        Loading...
+                    </div>
+                ) : (
+                    <Table className="staff-table" hover responsive>
+                        <thead>
                             <tr>
-                                <td colSpan={6} className="staff-empty-row">
-                                    No staff members found.
-                                </td>
+                                <th>#</th>
+                                <th>Username</th>
+                                <th>Staff Name</th>
+                                <th>Facility</th>
+                                <th>Status</th>
+                                <th>Actions</th>
                             </tr>
-                        ) : (
-                            staffList.map((staff, index) => (
-                                <tr key={staff.id}>
-                                    <td className="staff-cell-index">{index + 1}</td>
-                                    <td className="staff-cell-username">{staff.username}</td>
-                                    <td>{staff.name}</td>
-                                    <td>{staff.facility}</td>
-                                    <td>
-                                        <Badge
-                                            bg={staff.status === "active" ? "success" : "secondary"}
-                                            className="staff-status-badge"
-                                        >
-                                            {staff.status === "active" ? "Active" : "Suspended"}
-                                        </Badge>
-                                    </td>
-                                    <td>
-                                        <div className="staff-action-buttons">
-                                            <Button
-                                                variant="outline-primary"
-                                                size="sm"
-                                                onClick={() => navigate(`/admin/staff/edit/${staff.id}`, { state: staff })}
-                                            >
-                                                Edit
-                                            </Button>
-                                            <Button
-                                                variant={staff.status === "active" ? "outline-warning" : "outline-success"}
-                                                size="sm"
-                                                onClick={() => ToggleStatus(staff.id, staff.status)}
-                                            >
-                                                {staff.status === "active" ? "Suspend" : "Activate"}
-                                            </Button>
-                                            <Button
-                                                variant="outline-danger"
-                                                size="sm"
-                                                onClick={() => onDelete(staff.id)}
-                                            >
-                                                Delete
-                                            </Button>
-                                        </div>
+                        </thead>
+                        <tbody>
+                            {staffList.length === 0 ? (
+                                <tr>
+                                    <td colSpan={6} className="staff-empty-row">
+                                        No staff members found.
                                     </td>
                                 </tr>
-                            ))
-                        )}
-                    </tbody>
-                </Table>
+                            ) : (
+                                staffList.map((staff, index) => (
+                                    <tr key={staff.staffId}>
+                                        <td className="staff-cell-index">{index + 1}</td>
+                                        <td className="staff-cell-username">{staff.username}</td>
+                                        <td>{staff.name}</td>
+                                        <td>
+                                            {staff.facilities.length > 0
+                                                ? staff.facilities.map((f) => f.facility).join(", ")
+                                                : <span className="text-muted">—</span>
+                                            }
+                                        </td>
+                                        <td>
+                                            <Badge
+                                                bg={staff.status === "active" ? "success" : "secondary"}
+                                                className="staff-status-badge"
+                                            >
+                                                {staff.status === "active" ? "Active" : "Suspended"}
+                                            </Badge>
+                                        </td>
+                                        <td>
+                                            <div className="staff-action-buttons">
+                                                <Button
+                                                    variant="outline-primary"
+                                                    size="sm"
+                                                    onClick={() => navigate(`/admin/staff/edit/${staff.staffId}`, { state: staff })}
+                                                >
+                                                    Edit
+                                                </Button>
+                                                <Button
+                                                    variant={staff.status === "active" ? "outline-warning" : "outline-success"}
+                                                    size="sm"
+                                                    onClick={() => handleToggleStatus(staff.staffId, staff.status)}
+                                                >
+                                                    {staff.status === "active" ? "Suspend" : "Activate"}
+                                                </Button>
+                                                <Button
+                                                    variant="outline-danger"
+                                                    size="sm"
+                                                    onClick={() => handleDelete(staff.staffId)}
+                                                >
+                                                    Delete
+                                                </Button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))
+                            )}
+                        </tbody>
+                    </Table>
+                )}
             </div>
         </main>
     );

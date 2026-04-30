@@ -1,42 +1,38 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, useParams, useLocation } from "react-router";
-import { Button, Form } from "react-bootstrap";
+import { Alert, Button, Form, Spinner } from "react-bootstrap";
+import { staffManagementService } from "~/services/staff-management.service";
+import { facilityService } from "~/services/facility.service";
 import "./staff-mangament.css";
+
+type FacilityOption = { facilityId: number; name: string };
 
 type StaffFormState = {
     username: string;
     name: string;
-    facility: string;
     password: string;
 };
 
 type StaffEditState = {
-    id: number;
+    staffId: number;
     username: string;
     name: string;
-    facility: string;
+    facilities: { facilityId: number; facility: string }[];
     status: string;
 };
 
-const FACILITIES = [
-    "Badminton Court",
-    "Football Pitch",
-    "Tennis Court",
-    "Squash Court",
-    "Basketball Court",
-    "Swimming Pool",
-];
-
 const buildInitialState = (editData: StaffEditState | null): StaffFormState => {
     if (editData) {
-        return {
-            username: editData.username,
-            name: editData.name,
-            facility: editData.facility,
-            password: "",
-        };
+        return { username: editData.username, name: editData.name, password: "" };
     }
-    return { username: "", name: "", facility: FACILITIES[0], password: "" };
+    return { username: "", name: "", password: "" };
+};
+
+const buildInitialFacilityIds = (editData: StaffEditState | null): number[] => {
+    if (editData && editData.facilities.length > 0) {
+        return editData.facilities.map((f) => f.facilityId);
+    }
+    return [0];
 };
 
 export default function CreateStaff() {
@@ -47,24 +43,79 @@ export default function CreateStaff() {
     const editData = (location.state as StaffEditState | null) ?? null;
 
     const [form, setForm] = useState<StaffFormState>(() => buildInitialState(editData));
+    const [selectedFacilityIds, setSelectedFacilityIds] = useState<number[]>(
+        () => buildInitialFacilityIds(editData)
+    );
     const [confirmPassword, setConfirmPassword] = useState("");
+    const [facilities, setFacilities] = useState<FacilityOption[]>([]);
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [errorMessage, setErrorMessage] = useState("");
+
     const passwordMismatch = confirmPassword.length > 0 && form.password !== confirmPassword;
+    const hasUnselected = selectedFacilityIds.includes(0);
+
+    useEffect(() => {
+        const fetchFacilities = async () => {
+            try {
+                const response = await facilityService.getFacilityCards();
+                if (response.status === "ok") {
+                    setFacilities(response.data.map((f) => ({ facilityId: f.facilityId, name: f.name })));
+                }
+            } catch {
+                // non-critical — form still usable
+            }
+        };
+        void fetchFacilities();
+    }, []);
 
     const setField = <K extends keyof StaffFormState>(key: K, value: StaffFormState[K]) => {
         setForm((prev) => ({ ...prev, [key]: value }));
     };
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleAddFacility = () => {
+        setSelectedFacilityIds((prev) => [...prev, 0]);
+    };
+
+    const handleChangeFacility = (index: number, value: number) => {
+        setSelectedFacilityIds((prev) => prev.map((id, i) => (i === index ? value : id)));
+    };
+
+    const handleRemoveFacility = (index: number) => {
+        setSelectedFacilityIds((prev) => prev.filter((_, i) => i !== index));
+    };
+
+    const availableToAdd = facilities.filter((f) => !selectedFacilityIds.includes(f.facilityId));
+
+    const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
         if (form.password !== confirmPassword) return;
-        if (isEdit) {
-            // TODO: call update staff API
-            console.log("Update staff:", staffId, form);
-        } else {
-            // TODO: call create staff API
-            console.log("Create staff:", form);
+
+        const facilityIds = selectedFacilityIds.filter((id) => id !== 0);
+        setIsSubmitting(true);
+        setErrorMessage("");
+
+        try {
+            if (isEdit && staffId) {
+                await staffManagementService.updateStaff(Number(staffId), {
+                    username: form.username,
+                    name: form.name,
+                    password: form.password || undefined,
+                    facilityIds,
+                });
+            } else {
+                await staffManagementService.createStaff({
+                    username: form.username,
+                    name: form.name,
+                    password: form.password,
+                    facilityIds,
+                });
+            }
+            navigate("/admin/staff");
+        } catch {
+            setErrorMessage(isEdit ? "Failed to update staff." : "Failed to create staff.");
+        } finally {
+            setIsSubmitting(false);
         }
-        navigate("/admin/staff");
     };
 
     return (
@@ -75,6 +126,12 @@ export default function CreateStaff() {
                     Back
                 </Button>
             </div>
+
+            {errorMessage ? (
+                <Alert variant="danger" style={{ maxWidth: "48rem", margin: "0 auto 1rem" }}>
+                    {errorMessage}
+                </Alert>
+            ) : null}
 
             <form onSubmit={handleSubmit} className="create-staff-form">
                 <section className="create-staff-section">
@@ -136,28 +193,59 @@ export default function CreateStaff() {
                 </section>
 
                 <section className="create-staff-section">
-                    <h2>Assignment</h2>
-
-                    <div className="create-staff-field">
-                        <label htmlFor="cs-facility">Facility</label>
-                        <Form.Select
-                            id="cs-facility"
-                            value={form.facility}
-                            onChange={(e) => setField("facility", e.target.value)}
+                    <div className="create-staff-section-header">
+                        <h2>Facility Assignment</h2>
+                        <Button
+                            type="button"
+                            variant="outline-primary"
+                            size="sm"
+                            onClick={handleAddFacility}
+                            disabled={availableToAdd.length === 0 || hasUnselected}
                         >
-                            {FACILITIES.map((f) => (
-                                <option key={f} value={f}>{f}</option>
-                            ))}
-                        </Form.Select>
+                            + Add Facility
+                        </Button>
                     </div>
+
+                    {selectedFacilityIds.map((selectedId, index) => (
+                        <div key={index} className="create-staff-facility-row">
+                            <Form.Select
+                                value={selectedId}
+                                onChange={(e) => handleChangeFacility(index, Number(e.target.value))}
+                            >
+                                <option value={0} disabled>— Please select —</option>
+                                {facilities.map((f) => (
+                                    <option
+                                        key={f.facilityId}
+                                        value={f.facilityId}
+                                        disabled={selectedFacilityIds.includes(f.facilityId) && f.facilityId !== selectedId}
+                                    >
+                                        {f.name}
+                                    </option>
+                                ))}
+                            </Form.Select>
+                            {selectedFacilityIds.length > 1 ? (
+                                <Button
+                                    type="button"
+                                    variant="outline-danger"
+                                    size="sm"
+                                    onClick={() => handleRemoveFacility(index)}
+                                >
+                                    Remove
+                                </Button>
+                            ) : null}
+                        </div>
+                    ))}
                 </section>
 
                 <div className="create-staff-submit-row">
                     <Button variant="outline-secondary" type="button" onClick={() => navigate("/admin/staff")}>
                         Cancel
                     </Button>
-                    <Button variant="primary" type="submit">
-                        {isEdit ? "Save Changes" : "Create Staff"}
+                    <Button variant="primary" type="submit" disabled={isSubmitting}>
+                        {isSubmitting
+                            ? <Spinner animation="border" size="sm" />
+                            : isEdit ? "Save Changes" : "Create Staff"
+                        }
                     </Button>
                 </div>
             </form>

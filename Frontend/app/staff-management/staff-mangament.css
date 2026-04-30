@@ -147,6 +147,22 @@
     color: #374151;
 }
 
+.create-staff-section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.create-staff-facility-row {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+}
+
+.create-staff-facility-row .form-select {
+    flex: 1;
+}
+
 .create-staff-submit-row {
     display: flex;
     justify-content: flex-end;
