@@ -81,8 +81,8 @@ export default function CreateFacility() {
             maxPeople: form.maxPeople,
             schedules: form.openings.map((o) => ({
                 dayOfWeek: dayToApi(o.day),
-                startTime: o.startTime,
-                endTime: o.endTime
+                startTime: fmtTime(o.startTime),
+                endTime: fmtTime(o.endTime)
             })),
             slotTimes: slotTimes.map((s) => ({
                 slotDate: fmtDate(s.slotDate),

@@ -2,10 +2,8 @@ import { useState } from "react";
 import { useNavigate } from "react-router";
 import { Button, Modal } from "react-bootstrap";
 import Card from "react-bootstrap/Card";
-import type { Opening } from "./facility-list";
+import type { Opening, Slot } from "./facility-list";
 import "./facility.css";
-
-type Slot = { start: Date; end: Date };
 
 type FacilityCardProps = {
     facilityId: number;
@@ -13,7 +11,7 @@ type FacilityCardProps = {
     description: string;
     openings: Opening[];
     slotToday: Slot[];
-    slotByDate: Array<{ date: string; slots: string[] }>;
+    slotByDate: Array<{ date: string; slots: Slot[] }>;
     maxPeople: number;
     usageGuidelines: string[];
     imageUrl: string;
@@ -204,8 +202,8 @@ export default function FacilityCard({
                     <div className="facility-modal-slot-list mt-3">
                         {selectedDateSlots.length > 0 ? (
                             selectedDateSlots.map((slot) => (
-                                <span className="facility-slot-chip" key={`${selectedSlotDate}-${slot}`}>
-                                    {slot}
+                                <span className="facility-slot-chip" key={`${selectedSlotDate}-${fmtSlot(slot)}`}>
+                                    {fmtSlot(slot)}
                                 </span>
                             ))
                         ) : (

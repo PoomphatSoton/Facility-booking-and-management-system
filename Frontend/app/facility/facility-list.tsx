@@ -8,15 +8,17 @@ import { TIME_RANGES } from "./facility.mock";
 import { facilityService } from "~/services/facility.service";
 import type { FacilityCardItem } from "~/services/types";
 
-export type Opening = { day: string; startTime: string; endTime: string };
+export type Opening = { day: string; startTime: Date; endTime: Date };
+
+export type Slot = { start: Date; end: Date };
 
 export type FacilityItem = {
     facilityId: number;
     name: string;
     description: string;
     openings: Opening[];
-    slotToday: Array<{ start: Date; end: Date }>;
-    slotByDate: Array<{ date: string; slots: string[] }>;
+    slotToday: Slot[];
+    slotByDate: Array<{ date: string; slots: Slot[] }>;
     maxPeople: number;
     usageGuidelines: string[];
     imageUrl: string;
@@ -59,11 +61,11 @@ const mapCard = (card: FacilityCardItem): FacilityItem => {
         description: card.description || "No description available",
         openings: allSchedules.map((t) => ({
             day: capitalize(t.day),
-            startTime: t.startTime,
-            endTime: t.endTime,
+            startTime: timeStrToDate(t.startTime),
+            endTime: timeStrToDate(t.endTime),
         })),
         slotToday: card.slotToday.map(parseSlot),
-        slotByDate: [{ date: card.slotDate, slots: card.slotToday }],
+        slotByDate: [{ date: card.slotDate, slots: card.slotToday.map(parseSlot) }],
         maxPeople: card.maxPeople,
         usageGuidelines,
         imageUrl: "https://images.unsplash.com/photo-1517649763962-0c623066013b?auto=format&fit=crop&w=1200&q=80",
@@ -206,6 +208,22 @@ export default function FacilityList() {
                 {filteredFacilities.map((facility) => (
                     isAdmin ? (
                         <div key={facility.facilityId} className="admin-card-wrapper">
+                            <div className="admin-card-actions">
+                                <Button
+                                    variant="warning"
+                                    size="sm"
+                                    onClick={() => navigate(`/admin/facility/edit/${facility.facilityId}`, { state: facility })}
+                                >
+                                    Edit
+                                </Button>
+                                <Button
+                                    variant="danger"
+                                    size="sm"
+                                    onClick={() => handleDelete(facility.facilityId)}
+                                >
+                                    Delete
+                                </Button>
+                            </div>
                             <FacilityCard
                                 facilityId={facility.facilityId}
                                 name={facility.name}
@@ -217,22 +235,6 @@ export default function FacilityList() {
                                 usageGuidelines={facility.usageGuidelines}
                                 imageUrl={facility.imageUrl}
                             />
-                            <div className="admin-card-actions">
-                                <Button
-                                    variant="outline-warning"
-                                    size="sm"
-                                    onClick={() => navigate(`/admin/facility/edit/${facility.facilityId}`, { state: facility })}
-                                >
-                                    Edit
-                                </Button>
-                                <Button
-                                    variant="outline-danger"
-                                    size="sm"
-                                    onClick={() => handleDelete(facility.facilityId)}
-                                >
-                                    Delete
-                                </Button>
-                            </div>
                         </div>
                     ) : (
                         <FacilityCard

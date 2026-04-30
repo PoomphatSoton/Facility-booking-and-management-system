@@ -4,8 +4,8 @@ import "react-datepicker/dist/react-datepicker.css";
 
 export type Opening = {
     day: string;
-    startTime: string;
-    endTime: string;
+    startTime: Date;
+    endTime: Date;
 };
 
 type Props = {
@@ -15,26 +15,22 @@ type Props = {
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
-const timeToDate = (time: string) => {
-    const [h, m] = time.split(":").map(Number);
+const makeTime = (hour: number, minute = 0, second = 0, ms = 0): Date => {
     const date = new Date();
-    date.setHours(h, m, 0, 0);
+    date.setHours(hour, minute, second, ms);
     return date;
 };
 
-const dateToTime = (date: Date) =>
-    `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
-
 export default function OpeningHoursFacility({ openings, onChange }: Props) {
     const addOpening = () => {
-        onChange([...openings, { day: "Mon", startTime: "09:00", endTime: "17:00" }]);
+        onChange([...openings, { day: "Mon", startTime: makeTime(9), endTime: makeTime(17) }]);
     };
 
     const removeOpening = (index: number) => {
         onChange(openings.filter((_, i) => i !== index));
     };
 
-    const updateOpening = (index: number, field: keyof Opening, value: string) => {
+    const updateOpening = (index: number, field: keyof Opening, value: string | Date) => {
         onChange(openings.map((o, i) => i === index ? { ...o, [field]: value } : o));
     };
 
@@ -60,8 +56,8 @@ export default function OpeningHoursFacility({ openings, onChange }: Props) {
                     </Form.Select>
 
                     <DatePicker
-                        selected={timeToDate(opening.startTime)}
-                        onChange={(date) => date && updateOpening(index, "startTime", dateToTime(date))}
+                        selected={opening.startTime}
+                        onChange={(date: Date | null) => date && updateOpening(index, "startTime", date)}
                         showTimeSelect
                         showTimeSelectOnly
                         timeIntervals={30}
@@ -73,8 +69,8 @@ export default function OpeningHoursFacility({ openings, onChange }: Props) {
                     <span>to</span>
 
                     <DatePicker
-                        selected={timeToDate(opening.endTime)}
-                        onChange={(date) => date && updateOpening(index, "endTime", dateToTime(date))}
+                        selected={opening.endTime}
+                        onChange={(date: Date | null) => date && updateOpening(index, "endTime", date)}
                         showTimeSelect
                         showTimeSelectOnly
                         timeIntervals={30}
