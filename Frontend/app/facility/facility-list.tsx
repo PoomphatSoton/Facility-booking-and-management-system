@@ -1,135 +1,136 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate, useLocation } from "react-router";
 import FacilityCard from "./facility-card";
 import "./facility.css";
+import "../admin/admin-page.css";
 import { Alert, Button, Form } from "react-bootstrap";
 import { TIME_RANGES } from "./facility.mock";
 import { facilityService } from "~/services/facility.service";
 import type { FacilityCardItem } from "~/services/types";
 
-type FacilityUiItem = {
+export type Opening = { day: string; startTime: Date; endTime: Date };
+
+export type Slot = { start: Date; end: Date };
+
+export type FacilityItem = {
     facilityId: number;
     name: string;
-    category: string;
     description: string;
-    currentOpening: { day: string; startTime: string; endTime: string };
-    otherOpenings: Array<{ day: string; startTime: string; endTime: string }>;
-    slotToday: string[];
-    slotByDate: Array<{ date: string; slots: string[] }>;
+    openings: Opening[];
+    slotToday: Slot[];
+    slotByDate: Array<{ date: string; slots: Slot[] }>;
     maxPeople: number;
     usageGuidelines: string[];
     imageUrl: string;
-    openTime: string;
-    closeTime: string;
+    openTime: Date;
+    closeTime: Date;
 };
 
-const toMinutes = (time: string) => {
-    const [hour, minute] = time.split(":").map(Number);
-    return hour * 60 + minute;
+const getMinutes = (d: Date) => d.getHours() * 60 + d.getMinutes();
+
+const timeStrToMinutes = (t: string) => {
+    const [h, m] = t.split(":").map(Number);
+    return h * 60 + m;
+};
+
+const timeStrToDate = (t: string): Date => {
+    const [h, m] = t.split(":").map(Number);
+    const d = new Date();
+    d.setHours(h, m, 0, 0);
+    return d;
+};
+
+const parseSlot = (s: string): { start: Date; end: Date } => {
+    const [startStr, endStr] = s.split("-");
+    return { start: timeStrToDate(startStr), end: timeStrToDate(endStr) };
+};
+
+const mapCard = (card: FacilityCardItem): FacilityItem => {
+    const capitalize = (s: string) => `${s.charAt(0).toUpperCase()}${s.slice(1)}`;
+    const usageGuidelines = card.usageGuideline
+        ? card.usageGuideline.split(/\n|•|;/).map((g) => g.trim()).filter(Boolean)
+        : ["No usage guideline available"];
+
+    const allSchedules = card.availableTime
+        ? [card.availableTime, ...card.otherAvailableTimes]
+        : card.otherAvailableTimes;
+
+    return {
+        facilityId: card.facilityId,
+        name: card.name,
+        description: card.description || "No description available",
+        openings: allSchedules.map((t) => ({
+            day: capitalize(t.day),
+            startTime: timeStrToDate(t.startTime),
+            endTime: timeStrToDate(t.endTime),
+        })),
+        slotToday: card.slotToday.map(parseSlot),
+        slotByDate: [{ date: card.slotDate, slots: card.slotToday.map(parseSlot) }],
+        maxPeople: card.maxPeople,
+        usageGuidelines,
+        imageUrl: "https://images.unsplash.com/photo-1517649763962-0c623066013b?auto=format&fit=crop&w=1200&q=80",
+        openTime: card.availableTime ? timeStrToDate(card.availableTime.startTime) : new Date(0),
+        closeTime: card.availableTime ? timeStrToDate(card.availableTime.endTime) : new Date(0),
+    };
 };
 
 export default function FacilityList() {
-    const [facilities, setFacilities] = useState<FacilityUiItem[]>([]);
+    const navigate = useNavigate();
+    const { pathname } = useLocation();
+    const isAdmin = pathname.startsWith("/admin");
+    const [facilities, setFacilities] = useState<FacilityItem[]>([]);
     const [showFetchAlert, setShowFetchAlert] = useState(false);
     const [searchQuery, setSearchQuery] = useState("");
-    const [selectedCategory, setSelectedCategory] = useState("All");
     const [selectedTimeRange, setSelectedTimeRange] = useState("all");
     const [minCapacity, setMinCapacity] = useState(1);
     const [isAdvancedFiltersOpen, setIsAdvancedFiltersOpen] = useState(false);
 
-    const mapFacilityCardToUiItem = (card: FacilityCardItem): FacilityUiItem => {
-        const capitalize = (s: string) => `${s.charAt(0).toUpperCase()}${s.slice(1)}`;
-
-        const usageGuidelines = card.usageGuideline
-            ? card.usageGuideline
-                .split(/\n|•|;/)
-                .map((item) => item.trim())
-                .filter(Boolean)
-            : ["No usage guideline available"];
-
-        return {
-            facilityId: card.facilityId,
-            name: card.name,
-            category: "Other",
-            description: card.description || "No description available",
-            currentOpening: card.availableTime
-                ? {
-                    day: capitalize(card.availableTime.day),
-                    startTime: card.availableTime.startTime,
-                    endTime: card.availableTime.endTime,
-                }
-                : { day: "—", startTime: "—", endTime: "—" },
-            otherOpenings: card.otherAvailableTimes.map((t) => ({
-                day: capitalize(t.day),
-                startTime: t.startTime,
-                endTime: t.endTime,
-            })),
-            slotToday: card.slotToday,
-            slotByDate: [{ date: card.slotDate, slots: card.slotToday }],
-            maxPeople: card.maxPeople,
-            usageGuidelines,
-            imageUrl: "https://images.unsplash.com/photo-1517649763962-0c623066013b?auto=format&fit=crop&w=1200&q=80",
-            openTime: card.availableTime?.startTime ?? "00:00",
-            closeTime: card.availableTime?.endTime ?? "00:00",
-        };
-    };
-
-    const fetchFacilityCards = async () => {
+    const fetchFacilities = async () => {
         try {
             setShowFetchAlert(false);
             const response = await facilityService.getFacilityCards();
-            console.log("Facility cards response:", response);
-            if (response.status !== "ok") {
-                throw new Error(response.message || "Failed to fetch facilities");
-            }
-
-            setFacilities(response.data.map(mapFacilityCardToUiItem));
+            if (response.status !== "ok") throw new Error(response.message || "Failed to fetch facilities");
+            setFacilities(response.data.map(mapCard));
         } catch {
             setShowFetchAlert(true);
             setFacilities([]);
         }
     };
 
-    useEffect(() => {
-        void fetchFacilityCards();
-    }, []);
-
-    const categories = useMemo(
-        () => ["All", ...new Set(facilities.map((facility) => facility.category))],
-        [facilities],
-    );
+    useEffect(() => { void fetchFacilities(); }, []);
 
     const filteredFacilities = useMemo(() => {
         const query = searchQuery.trim().toLowerCase();
-
         return facilities.filter((facility) => {
-            const facilityOpenInMinutes = toMinutes(facility.openTime);
-            const facilityCloseInMinutes = toMinutes(facility.closeTime);
-            const matchesCategory = selectedCategory === "All" || facility.category === selectedCategory;
             const matchesCapacity = facility.maxPeople >= minCapacity;
-            const matchesTimeWindow =
-                selectedTimeRange === "all" ||
-                (() => {
-                    const selectedRange = TIME_RANGES.find((range) => range.id === selectedTimeRange);
-                    if (!selectedRange || !selectedRange.start || !selectedRange.end) return true;
-
-                    const rangeStartInMinutes = toMinutes(selectedRange.start);
-                    const rangeEndInMinutes = toMinutes(selectedRange.end);
-
-                    return facilityOpenInMinutes <= rangeStartInMinutes && facilityCloseInMinutes >= rangeEndInMinutes;
-                })();
+            const matchesTimeWindow = selectedTimeRange === "all" || (() => {
+                const range = TIME_RANGES.find((r) => r.id === selectedTimeRange);
+                if (!range?.start || !range?.end) return true;
+                return getMinutes(facility.openTime) <= timeStrToMinutes(range.start)
+                    && getMinutes(facility.closeTime) >= timeStrToMinutes(range.end);
+            })();
             const matchesSearch =
                 !query ||
                 facility.name.toLowerCase().includes(query) ||
-                facility.description.toLowerCase().includes(query) ||
-                facility.category.toLowerCase().includes(query);
-
-            return matchesCategory && matchesSearch && matchesTimeWindow && matchesCapacity;
+                facility.description.toLowerCase().includes(query);
+            return matchesSearch && matchesTimeWindow && matchesCapacity;
         });
-    }, [facilities, minCapacity, searchQuery, selectedCategory, selectedTimeRange]);
+    }, [facilities, minCapacity, searchQuery, selectedTimeRange]);
+
+    const handleDelete = async (facilityId: number) => {
+        const confirmed = window.confirm("Do you want to delete this facility?");
+        if (!confirmed) return;
+        try {
+            await facilityService.deleteFacility(facilityId);
+            setFacilities((prev) => prev.filter((f) => f.facilityId !== facilityId));
+        } catch (error) {
+            console.error(error);
+            alert("Failed to delete facility");
+        }
+    };
 
     const handleResetFilters = () => {
         setSearchQuery("");
-        setSelectedCategory("All");
         setSelectedTimeRange("all");
         setMinCapacity(1);
     };
@@ -137,14 +138,21 @@ export default function FacilityList() {
     return (
         <main className="facility-page">
             <div className="facility-page-header">
-                <h1>Browse Facilities</h1>
-                <p>Find and reserve sports facilities easily</p>
+                <div>
+                    <h1>Browse Facilities</h1>
+                    <p>Find and reserve sports facilities easily</p>
+                </div>
+                {isAdmin && (
+                    <Button variant="primary" onClick={() => navigate("/admin/facility/create")}>
+                        Create Facility
+                    </Button>
+                )}
             </div>
 
             <div className="facility-toolbar">
                 {showFetchAlert ? (
                     <Alert variant="warning" dismissible onClose={() => setShowFetchAlert(false)} className="mb-0">
-                        Unable to load latest facility data. Showing mock data.
+                        Unable to load latest facility data.
                     </Alert>
                 ) : null}
                 <div className="facility-filter-row">
@@ -152,25 +160,9 @@ export default function FacilityList() {
                         className="facility-search"
                         placeholder="Search facilities"
                         value={searchQuery}
-                        onChange={(event) => setSearchQuery(event.target.value)}
+                        onChange={(e) => setSearchQuery(e.target.value)}
                     />
-
-                    <Form.Select
-                        value={selectedCategory}
-                        onChange={(event) => setSelectedCategory(event.target.value)}
-                        aria-label="Category selector"
-                    >
-                        {categories.map((category) => (
-                            <option key={category} value={category}>
-                                {category}
-                            </option>
-                        ))}
-                    </Form.Select>
-
-                    <Button
-                        variant="primary"
-                        onClick={() => setIsAdvancedFiltersOpen((isOpen) => !isOpen)}
-                    >
+                    <Button variant="primary" onClick={() => setIsAdvancedFiltersOpen((open) => !open)}>
                         {isAdvancedFiltersOpen ? "Hide filters" : "More filters"}
                     </Button>
                 </div>
@@ -182,12 +174,10 @@ export default function FacilityList() {
                             <Form.Select
                                 id="facility-time-range"
                                 value={selectedTimeRange}
-                                onChange={(event) => setSelectedTimeRange(event.target.value)}
+                                onChange={(e) => setSelectedTimeRange(e.target.value)}
                             >
                                 {TIME_RANGES.map((range) => (
-                                    <option key={range.id} value={range.id}>
-                                        {range.label}
-                                    </option>
+                                    <option key={range.id} value={range.id}>{range.label}</option>
                                 ))}
                             </Form.Select>
                         </div>
@@ -197,7 +187,7 @@ export default function FacilityList() {
                             <Form.Select
                                 id="facility-capacity"
                                 value={minCapacity}
-                                onChange={(event) => setMinCapacity(Number(event.target.value))}
+                                onChange={(e) => setMinCapacity(Number(e.target.value))}
                             >
                                 <option value={1}>Any capacity</option>
                                 <option value={4}>4+ people</option>
@@ -207,7 +197,7 @@ export default function FacilityList() {
                             </Form.Select>
                         </div>
 
-                        <Button variant="outline-primary" onClick={handleResetFilters} type="button">
+                        <Button variant="outline-primary" type="button" onClick={handleResetFilters}>
                             Reset filters
                         </Button>
                     </div>
@@ -216,19 +206,50 @@ export default function FacilityList() {
 
             <div className="facility-list-container">
                 {filteredFacilities.map((facility) => (
-                    <FacilityCard
-                        facilityId={facility.facilityId}
-                        key={facility.name}
-                        name={facility.name}
-                        description={facility.description}
-                        currentOpening={facility.currentOpening}
-                        otherOpenings={facility.otherOpenings}
-                        slotToday={facility.slotToday}
-                        slotByDate={facility.slotByDate}
-                        maxPeople={facility.maxPeople}
-                        usageGuidelines={facility.usageGuidelines}
-                        imageUrl={facility.imageUrl}
-                    />
+                    isAdmin ? (
+                        <div key={facility.facilityId} className="admin-card-wrapper">
+                            <div className="admin-card-actions">
+                                <Button
+                                    variant="warning"
+                                    size="sm"
+                                    onClick={() => navigate(`/admin/facility/edit/${facility.facilityId}`, { state: facility })}
+                                >
+                                    Edit
+                                </Button>
+                                <Button
+                                    variant="danger"
+                                    size="sm"
+                                    onClick={() => handleDelete(facility.facilityId)}
+                                >
+                                    Delete
+                                </Button>
+                            </div>
+                            <FacilityCard
+                                facilityId={facility.facilityId}
+                                name={facility.name}
+                                description={facility.description}
+                                openings={facility.openings}
+                                slotToday={facility.slotToday}
+                                slotByDate={facility.slotByDate}
+                                maxPeople={facility.maxPeople}
+                                usageGuidelines={facility.usageGuidelines}
+                                imageUrl={facility.imageUrl}
+                            />
+                        </div>
+                    ) : (
+                        <FacilityCard
+                            key={facility.facilityId}
+                            facilityId={facility.facilityId}
+                            name={facility.name}
+                            description={facility.description}
+                            openings={facility.openings}
+                            slotToday={facility.slotToday}
+                            slotByDate={facility.slotByDate}
+                            maxPeople={facility.maxPeople}
+                            usageGuidelines={facility.usageGuidelines}
+                            imageUrl={facility.imageUrl}
+                        />
+                    )
                 ))}
             </div>
 

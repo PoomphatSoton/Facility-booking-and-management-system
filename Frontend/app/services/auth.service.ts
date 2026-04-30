@@ -51,6 +51,7 @@ export const authService = {
 
   login: async (body: LoginRequest) => {
     const { data } = await api.post<LoginResponse>("/auth/login", body);
+    console.log("Login response = ", data);
     return data;
   },
 
@@ -66,6 +67,7 @@ export const authService = {
   checkLogin: async () => {
     try {
       const { data } = await api.get<SessionStatusResponse>("/auth/session");
+      console.log("Session status = ", data);
       return data;
     } catch {
       return { isLoggedIn: false, isPendingStep3: false, user: null };

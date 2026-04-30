@@ -11,7 +11,8 @@ import {
 import type { Route } from "./+types/root";
 import "./app.css";
 import "bootstrap/dist/css/bootstrap.min.css";
-import AppNavbar from "./components/app-navbar";
+import AppNavbar from "./component/app-navbar";
+import { AuthProvider } from "./auth/auth-middleware";
 
 export const links: Route.LinksFunction = () => [
   { rel: "preconnect", href: "https://fonts.googleapis.com" },
@@ -49,10 +50,10 @@ export default function App() {
   const shouldShowNavbar = !location.pathname.startsWith("/auth");
 
   return (
-    <>
+    <AuthProvider>
       {shouldShowNavbar ? <AppNavbar /> : null}
       <Outlet />
-    </>
+    </AuthProvider>
   );
 }
 

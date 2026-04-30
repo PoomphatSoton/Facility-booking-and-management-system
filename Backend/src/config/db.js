@@ -6,8 +6,8 @@ const { Pool } = require('pg');
 const sslConfig =
   process.env.DB_SSL === 'true'
     ? {
-        rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED !== 'false',
-      }
+      rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED !== 'false',
+    }
     : false;
 
 const buildPoolConfig = () => {
@@ -101,13 +101,6 @@ const initDb = async () => {
   `);
 
   await pool.query(`
-    CREATE TABLE IF NOT EXISTS public.staff_roles (
-      role_id SERIAL PRIMARY KEY,
-      role_name VARCHAR(100) NOT NULL UNIQUE
-    )
-  `);
-
-  await pool.query(`
     CREATE TABLE IF NOT EXISTS public.members (
       member_id SERIAL PRIMARY KEY,
       user_id INTEGER NOT NULL UNIQUE REFERENCES public.users(id) ON DELETE CASCADE,
@@ -124,8 +117,6 @@ const initDb = async () => {
     CREATE TABLE IF NOT EXISTS public.staff (
       staff_id SERIAL PRIMARY KEY,
       user_id INTEGER NOT NULL UNIQUE REFERENCES public.users(id) ON DELETE CASCADE,
-      role_id INTEGER REFERENCES public.staff_roles(role_id) ON DELETE SET NULL,
-      department_id INTEGER,
       created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
     )
   `);
@@ -139,7 +130,7 @@ const initDb = async () => {
       CONSTRAINT member_skills_skill_level_check CHECK (skill_level IN ('beginner', 'intermediate', 'advanced'))
     )
   `);
- 
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS public.member_sport_preferences (
       member_sport_preference_id SERIAL PRIMARY KEY,
@@ -159,7 +150,6 @@ const initDb = async () => {
     )
   `);
 
-  // Backfill schema for existing databases created before max_people was introduced.
   await pool.query(`
     ALTER TABLE public.facilities
     ADD COLUMN IF NOT EXISTS max_people INTEGER NOT NULL DEFAULT 1
@@ -176,7 +166,6 @@ const initDb = async () => {
     )
   `);
 
-  // Backfill schema for existing databases that still include slot_duration.
   await pool.query(`
     ALTER TABLE public.facility_schedules
     DROP COLUMN IF EXISTS slot_duration
@@ -196,7 +185,6 @@ const initDb = async () => {
     )
   `);
 
-  // Backfill schema for existing databases before slot_date was introduced.
   await pool.query(`
     ALTER TABLE public.facility_slot_times
     ADD COLUMN IF NOT EXISTS slot_date DATE NOT NULL DEFAULT CURRENT_DATE
@@ -265,15 +253,30 @@ const initDb = async () => {
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS public.matching_requests (
-      request_matching_id SERIAL PRIMARY KEY,
-      sender_id INTEGER REFERENCES public.members(member_id) ON DELETE SET NULL,
-      receiver_id INTEGER REFERENCES public.members(member_id) ON DELETE SET NULL,
-      booking_id INTEGER REFERENCES public.bookings(booking_id) ON DELETE CASCADE,
-      status TEXT NOT NULL DEFAULT 'open',
-      created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-      CONSTRAINT matching_requests_status_check CHECK (status IN ('open', 'matched'))
-    )
+     request_matching_id SERIAL PRIMARY KEY,
+     sender_id INTEGER REFERENCES public.members(member_id) ON DELETE SET NULL,
+     receiver_id INTEGER REFERENCES public.members(member_id) ON DELETE SET NULL,
+     booking_id INTEGER REFERENCES public.bookings(booking_id) ON DELETE CASCADE,
+     status TEXT NOT NULL DEFAULT 'pending',
+     created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+     CONSTRAINT matching_requests_status_check CHECK (status IN ('pending', 'accepted', 'rejected'))
+   )
   `);
+  await pool.query(`
+  ALTER TABLE public.matching_requests
+  ALTER COLUMN status SET DEFAULT 'pending'
+`);
+
+  await pool.query(`
+  ALTER TABLE public.matching_requests
+  DROP CONSTRAINT IF EXISTS matching_requests_status_check
+`);
+
+  await pool.query(`
+  ALTER TABLE public.matching_requests
+  ADD CONSTRAINT matching_requests_status_check
+  CHECK (status IN ('pending', 'accepted', 'rejected'))
+`);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS public.equipment_reports (

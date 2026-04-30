@@ -37,7 +37,6 @@ const getSlotTime = async ({ facilityIds, slotDate }) => {
 const getAvailableTime = async ({ facilityIds }) => {
   if (!facilityIds.length) return new Map();
 
-  // Fetch all days at once, split today vs other days in getFacilityCards
   const result = await pool.query(
     `
       SELECT
@@ -53,7 +52,6 @@ const getAvailableTime = async ({ facilityIds }) => {
     [facilityIds]
   );
 
-  // Map<facilityId, Array<{day, startTime, endTime}>>
   const availableMap = new Map();
 
   for (const row of result.rows) {
@@ -84,7 +82,6 @@ const getFacilityCards = async () => {
   );
 
   const facilities = facilityResult.rows;
-//   console.log("Get facilities", facilities);
   const facilityIds = facilities.map((facility) => facility.facility_id);
 
   const today = new Date();
@@ -116,8 +113,204 @@ const getFacilityCards = async () => {
   });
 };
 
+const updateFacility = async (facilityId, data) => {
+  const client = await pool.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    const {
+      name,
+      description,
+      usageGuideline,
+      maxPeople,
+      schedules = [],
+      slotTimes = [],
+    } = data;
+// Update facility details
+    const facilityResult = await client.query(
+      `
+      UPDATE public.facilities
+      SET
+        name = $1,
+        description = $2,
+        usage_guideline = $3,
+        max_people = $4
+      WHERE facility_id = $5
+      RETURNING *
+      `,
+      [
+        name,
+        description ?? null,
+        usageGuideline ?? null,
+        maxPeople,
+        facilityId,
+      ]
+    );
+
+    if (facilityResult.rows.length === 0) {
+      throw new Error('Facility not found');
+    }
+
+// delete old schedules and insert new one
+    await client.query(
+      `
+      DELETE FROM public.facility_schedules
+      WHERE facility_id = $1
+      `,
+      [facilityId]
+    );
+
+    for (const schedule of schedules) {
+      await client.query(
+        `
+        INSERT INTO public.facility_schedules
+          (facility_id, day_of_week, start_time, end_time)
+        VALUES ($1, $2, $3, $4)
+        `,
+        [
+          facilityId,
+          schedule.dayOfWeek,
+          schedule.startTime,
+          schedule.endTime,
+        ]
+      );
+    }
+
+    // Delete non-booked slots and replace with new ones
+    await client.query(
+      `DELETE FROM public.facility_slot_times WHERE facility_id = $1 AND is_booking = FALSE`,
+      [facilityId]
+    );
+
+    for (const slot of slotTimes) {
+      await client.query(
+        `
+        INSERT INTO public.facility_slot_times
+          (facility_id, slot_date, slot_start_time, slot_end_time, is_booking)
+        VALUES ($1, $2, $3, $4, $5)
+        `,
+        [facilityId, slot.slotDate, slot.startTime, slot.endTime, slot.isBooking ?? false]
+      );
+    }
+
+    await client.query('COMMIT');
+
+    return facilityResult.rows[0];
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+};
+
+const deleteFacility = async (facilityId) => {
+  const client = await pool.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    const result = await client.query(
+      `
+      DELETE FROM public.facilities
+      WHERE facility_id = $1
+      RETURNING *
+      `,
+      [facilityId]
+    );
+
+    if (result.rows.length === 0) {
+      throw new Error('Facility not found');
+    }
+
+    await client.query('COMMIT');
+
+    return result.rows[0];
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+};
+
+const createFacility = async (data) => {
+  console.log("createFacility data = ", data);
+  const client = await pool.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    const {
+      name,
+      description,
+      usageGuideline,
+      maxPeople,
+      schedules = [],
+      slotTimes = [],
+    } = data;
+
+    const facilityResult = await client.query(
+      `
+      INSERT INTO public.facilities
+        (name, description, usage_guideline, max_people)
+      VALUES ($1, $2, $3, $4)
+      RETURNING *
+      `,
+      [
+        name,
+        description ?? null,
+        usageGuideline ?? null,
+        maxPeople,
+      ]
+    );
+
+    const facility = facilityResult.rows[0];
+
+    for (const schedule of schedules) {
+      await client.query(
+        `
+        INSERT INTO public.facility_schedules
+          (facility_id, day_of_week, start_time, end_time)
+        VALUES ($1, $2, $3, $4)
+        `,
+        [
+          facility.facility_id,
+          schedule.dayOfWeek,
+          schedule.startTime,
+          schedule.endTime,
+        ]
+      );
+    }
+
+    for (const slot of slotTimes) {
+      await client.query(
+        `
+        INSERT INTO public.facility_slot_times
+          (facility_id, slot_date, slot_start_time, slot_end_time, is_booking)
+        VALUES ($1, $2, $3, $4, $5)
+        `,
+        [facility.facility_id, slot.slotDate, slot.startTime, slot.endTime, slot.isBooking ?? false]
+      );
+    }
+
+    await client.query('COMMIT');
+
+    return facility;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+};
+
 module.exports = {
   getSlotTime,
   getAvailableTime,
   getFacilityCards,
+  updateFacility,
+  deleteFacility,
+  createFacility
 };

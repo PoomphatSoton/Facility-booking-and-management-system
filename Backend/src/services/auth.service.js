@@ -25,6 +25,7 @@ const toPublicUser = (user) => ({
   lastName: user.lastName || '',
   dateOfBirth: user.dateOfBirth || '',
   address: user.address || '',
+  role: user.role || 'member',
 });
 
 const isProfileIncomplete = (user) =>
@@ -150,6 +151,7 @@ const verifyRegisterOtp = async ({ registrationId, otp }) => {
     lastName: null,
     dateOfBirth: null,
     address: null,
+    role: 'member',
   });
   await userStore.removePendingByRegistrationId(registrationId);
   const token = createUserToken(user);
@@ -185,6 +187,7 @@ const login = async ({ email, password }) => {
   validateLoginInput({ email, password });
 
   const user = await userStore.findByEmail(email);
+  console.log('user = ', user);
   if (!user) {
     throw buildError(INVALID_CREDENTIALS_MESSAGE, 401);
   }
@@ -217,9 +220,9 @@ const getSessionStatus = async ({ authToken }) => {
 
   try {
     const payload = jwt.verify(token, process.env.JWT_SECRET);
-
     if (payload.kind === 'user' && payload.sub) {
       const user = await userStore.findById(payload.sub);
+      console.log("user in getSessionStatus = ", user, "payload = ", payload);
       if (!user) {
         return { isLoggedIn: false, isPendingStep3: false, user: null };
       }
