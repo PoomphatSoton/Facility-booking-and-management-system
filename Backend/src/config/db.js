@@ -55,6 +55,16 @@ const initDb = async () => {
 
   await pool.query(`
     ALTER TABLE public.users
+    ADD COLUMN IF NOT EXISTS firebase_uid TEXT UNIQUE
+  `);
+
+  await pool.query(`
+    ALTER TABLE public.users
+    ALTER COLUMN password_hash DROP NOT NULL
+  `);
+
+  await pool.query(`
+    ALTER TABLE public.users
     ALTER COLUMN first_name DROP NOT NULL,
     ALTER COLUMN last_name DROP NOT NULL,
     ALTER COLUMN date_of_birth DROP NOT NULL,
@@ -80,10 +90,17 @@ const initDb = async () => {
   `);
 
   await pool.query(`
+    ALTER TABLE public.pending_registrations
+    ALTER COLUMN password_hash DROP NOT NULL,
+    ADD COLUMN IF NOT EXISTS firebase_uid TEXT
+  `);
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS public.pending_registrations (
       registration_id TEXT PRIMARY KEY,
       email TEXT NOT NULL UNIQUE,
-      password_hash TEXT NOT NULL,
+      password_hash TEXT,
+      firebase_uid TEXT UNIQUE,
       otp TEXT NOT NULL,
       otp_verified BOOLEAN NOT NULL DEFAULT FALSE,
       created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
