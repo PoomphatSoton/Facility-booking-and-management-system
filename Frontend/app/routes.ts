@@ -17,6 +17,8 @@ export default [
       route("booking/notifications", "booking/notifications.tsx"),
   ]),
 
+  route("profile", "profile/profile.tsx"),
+
   layout("routes/staff-layout.tsx", [
       route("staff", "staff/pending-requests.tsx"),
       route("staff/upcoming", "staff/upcoming-bookings.tsx")
