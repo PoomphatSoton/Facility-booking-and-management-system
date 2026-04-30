@@ -173,6 +173,11 @@ const initDb = async () => {
   `);
 
   await pool.query(`
+    ALTER TABLE public.facilities
+    ADD COLUMN IF NOT EXISTS image_url TEXT
+  `);
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS public.facility_schedules (
       schedule_id SERIAL PRIMARY KEY,
       facility_id INTEGER NOT NULL REFERENCES public.facilities(facility_id) ON DELETE CASCADE,

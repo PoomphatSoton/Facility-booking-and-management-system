@@ -4,6 +4,7 @@ import { authService } from "~/services/auth.service";
 import { APP_BRAND_NAME } from "~/constants/app.constants";
 import { useAuth } from "~/auth/auth-middleware";
 import NotificationBell from "~/nofication/notification";
+import profileIcon from "~/image/profile.png";
 
 export default function AppNavbar() {
   const navigate = useNavigate();
@@ -50,6 +51,9 @@ export default function AppNavbar() {
                   My Bookings
                 </Nav.Link>
                 <NotificationBell />
+                <Nav.Link as={Link} to="/profile" style={{ padding: 0 }}>
+                  <img src={profileIcon} alt="Profile" style={{ width: '24px'}} />
+                </Nav.Link>
               </>
             )}
 

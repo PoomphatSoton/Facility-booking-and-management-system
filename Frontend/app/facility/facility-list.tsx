@@ -4,7 +4,7 @@ import FacilityCard from "./facility-card";
 import "./facility.css";
 import "../admin/admin-page.css";
 import { Alert, Button, Form } from "react-bootstrap";
-import { TIME_RANGES } from "./facility.mock";
+
 import { facilityService } from "~/services/facility.service";
 import type { FacilityCardItem } from "~/services/types";
 
@@ -25,6 +25,14 @@ export type FacilityItem = {
     openTime: Date;
     closeTime: Date;
 };
+
+const TIME_RANGES = [
+    { id: "all", label: "Any time" },
+    { id: "morning", label: "Morning (06:00-12:00)", start: "06:00", end: "12:00" },
+    { id: "afternoon", label: "Afternoon (12:00-16:00)", start: "12:00", end: "16:00" },
+    { id: "evening", label: "Evening (16:00-20:00)", start: "16:00", end: "20:00" },
+    { id: "night", label: "Night (20:00-22:00)", start: "20:00", end: "22:00" },
+];
 
 const getMinutes = (d: Date) => d.getHours() * 60 + d.getMinutes();
 
@@ -68,7 +76,7 @@ const mapCard = (card: FacilityCardItem): FacilityItem => {
         slotByDate: [{ date: card.slotDate, slots: card.slotToday.map(parseSlot) }],
         maxPeople: card.maxPeople,
         usageGuidelines,
-        imageUrl: "https://images.unsplash.com/photo-1517649763962-0c623066013b?auto=format&fit=crop&w=1200&q=80",
+        imageUrl: card.imageUrl ?? "",
         openTime: card.availableTime ? timeStrToDate(card.availableTime.startTime) : new Date(0),
         closeTime: card.availableTime ? timeStrToDate(card.availableTime.endTime) : new Date(0),
     };
