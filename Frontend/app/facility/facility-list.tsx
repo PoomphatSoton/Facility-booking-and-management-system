@@ -8,24 +8,39 @@ import { TIME_RANGES } from "./facility.mock";
 import { facilityService } from "~/services/facility.service";
 import type { FacilityCardItem } from "~/services/types";
 
+export type Opening = { day: string; startTime: string; endTime: string };
+
 export type FacilityItem = {
     facilityId: number;
     name: string;
     description: string;
-    currentOpening: { day: string; startTime: string; endTime: string };
-    otherOpenings: Array<{ day: string; startTime: string; endTime: string }>;
-    slotToday: string[];
+    openings: Opening[];
+    slotToday: Array<{ start: Date; end: Date }>;
     slotByDate: Array<{ date: string; slots: string[] }>;
     maxPeople: number;
     usageGuidelines: string[];
     imageUrl: string;
-    openTime: string;
-    closeTime: string;
+    openTime: Date;
+    closeTime: Date;
 };
 
-const toMinutes = (time: string) => {
-    const [hour, minute] = time.split(":").map(Number);
-    return hour * 60 + minute;
+const getMinutes = (d: Date) => d.getHours() * 60 + d.getMinutes();
+
+const timeStrToMinutes = (t: string) => {
+    const [h, m] = t.split(":").map(Number);
+    return h * 60 + m;
+};
+
+const timeStrToDate = (t: string): Date => {
+    const [h, m] = t.split(":").map(Number);
+    const d = new Date();
+    d.setHours(h, m, 0, 0);
+    return d;
+};
+
+const parseSlot = (s: string): { start: Date; end: Date } => {
+    const [startStr, endStr] = s.split("-");
+    return { start: timeStrToDate(startStr), end: timeStrToDate(endStr) };
 };
 
 const mapCard = (card: FacilityCardItem): FacilityItem => {
@@ -33,25 +48,27 @@ const mapCard = (card: FacilityCardItem): FacilityItem => {
     const usageGuidelines = card.usageGuideline
         ? card.usageGuideline.split(/\n|•|;/).map((g) => g.trim()).filter(Boolean)
         : ["No usage guideline available"];
+
+    const allSchedules = card.availableTime
+        ? [card.availableTime, ...card.otherAvailableTimes]
+        : card.otherAvailableTimes;
+
     return {
         facilityId: card.facilityId,
         name: card.name,
         description: card.description || "No description available",
-        currentOpening: card.availableTime
-            ? { day: capitalize(card.availableTime.day), startTime: card.availableTime.startTime, endTime: card.availableTime.endTime }
-            : { day: "—", startTime: "—", endTime: "—" },
-        otherOpenings: card.otherAvailableTimes.map((t) => ({
+        openings: allSchedules.map((t) => ({
             day: capitalize(t.day),
             startTime: t.startTime,
             endTime: t.endTime,
         })),
-        slotToday: card.slotToday,
+        slotToday: card.slotToday.map(parseSlot),
         slotByDate: [{ date: card.slotDate, slots: card.slotToday }],
         maxPeople: card.maxPeople,
         usageGuidelines,
         imageUrl: "https://images.unsplash.com/photo-1517649763962-0c623066013b?auto=format&fit=crop&w=1200&q=80",
-        openTime: card.availableTime?.startTime ?? "00:00",
-        closeTime: card.availableTime?.endTime ?? "00:00",
+        openTime: card.availableTime ? timeStrToDate(card.availableTime.startTime) : new Date(0),
+        closeTime: card.availableTime ? timeStrToDate(card.availableTime.endTime) : new Date(0),
     };
 };
 
@@ -87,7 +104,8 @@ export default function FacilityList() {
             const matchesTimeWindow = selectedTimeRange === "all" || (() => {
                 const range = TIME_RANGES.find((r) => r.id === selectedTimeRange);
                 if (!range?.start || !range?.end) return true;
-                return toMinutes(facility.openTime) <= toMinutes(range.start) && toMinutes(facility.closeTime) >= toMinutes(range.end);
+                return getMinutes(facility.openTime) <= timeStrToMinutes(range.start)
+                    && getMinutes(facility.closeTime) >= timeStrToMinutes(range.end);
             })();
             const matchesSearch =
                 !query ||
@@ -100,13 +118,9 @@ export default function FacilityList() {
     const handleDelete = async (facilityId: number) => {
         const confirmed = window.confirm("Do you want to delete this facility?");
         if (!confirmed) return;
-
         try {
             await facilityService.deleteFacility(facilityId);
-
-            setFacilities((prev) =>
-                prev.filter((facility) => facility.facilityId !== facilityId)
-            );
+            setFacilities((prev) => prev.filter((f) => f.facilityId !== facilityId));
         } catch (error) {
             console.error(error);
             alert("Failed to delete facility");
@@ -122,15 +136,15 @@ export default function FacilityList() {
     return (
         <main className="facility-page">
             <div className="facility-page-header">
-                    <div>
-                        <h1>Browse Facilities</h1>
-                        <p>Find and reserve sports facilities easily</p>
-                    </div>
-                    {isAdmin && (
-                        <Button variant="primary" onClick={() => navigate("/admin/facility/create")}>
-                            Create Facility
-                        </Button>
-                    )}
+                <div>
+                    <h1>Browse Facilities</h1>
+                    <p>Find and reserve sports facilities easily</p>
+                </div>
+                {isAdmin && (
+                    <Button variant="primary" onClick={() => navigate("/admin/facility/create")}>
+                        Create Facility
+                    </Button>
+                )}
             </div>
 
             <div className="facility-toolbar">
@@ -190,40 +204,50 @@ export default function FacilityList() {
 
             <div className="facility-list-container">
                 {filteredFacilities.map((facility) => (
-                    <div>
-                        {isAdmin ? (
+                    isAdmin ? (
+                        <div key={facility.facilityId} className="admin-card-wrapper">
+                            <FacilityCard
+                                facilityId={facility.facilityId}
+                                name={facility.name}
+                                description={facility.description}
+                                openings={facility.openings}
+                                slotToday={facility.slotToday}
+                                slotByDate={facility.slotByDate}
+                                maxPeople={facility.maxPeople}
+                                usageGuidelines={facility.usageGuidelines}
+                                imageUrl={facility.imageUrl}
+                            />
                             <div className="admin-card-actions">
                                 <Button
-                                    variant="warning"
+                                    variant="outline-warning"
                                     size="sm"
                                     onClick={() => navigate(`/admin/facility/edit/${facility.facilityId}`, { state: facility })}
                                 >
                                     Edit
                                 </Button>
                                 <Button
-                                    variant="danger"
+                                    variant="outline-danger"
                                     size="sm"
                                     onClick={() => handleDelete(facility.facilityId)}
                                 >
                                     Delete
                                 </Button>
                             </div>
-                        ) : null}
-                    
+                        </div>
+                    ) : (
                         <FacilityCard
                             key={facility.facilityId}
                             facilityId={facility.facilityId}
                             name={facility.name}
                             description={facility.description}
-                            currentOpening={facility.currentOpening}
-                            otherOpenings={facility.otherOpenings}
+                            openings={facility.openings}
                             slotToday={facility.slotToday}
                             slotByDate={facility.slotByDate}
                             maxPeople={facility.maxPeople}
                             usageGuidelines={facility.usageGuidelines}
                             imageUrl={facility.imageUrl}
                         />
-                    </div>
+                    )
                 ))}
             </div>
 
