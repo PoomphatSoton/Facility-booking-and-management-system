@@ -32,7 +32,7 @@ export default [
   ]),
 
   layout("routes/staff-layout.tsx", [
-      route("staff/pending", "staff/pending-requests.tsx"),
+      route("staff", "staff/pending-requests.tsx"),
       route("staff/upcoming", "staff/upcoming-bookings.tsx")
   ]),
 
