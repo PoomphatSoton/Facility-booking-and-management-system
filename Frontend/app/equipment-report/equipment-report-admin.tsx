@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type {
   EquipmentReportItem,
   EquipmentReportStatus,
@@ -32,8 +32,49 @@ const initialReports: EquipmentReportItem[] = [
   },
 ];
 
+type SessionResponse = {
+  isLoggedIn?: boolean;
+  user?: {
+    email?: string;
+    role?: string;
+  };
+};
+
 export default function EquipmentReportAdmin() {
   const [reports, setReports] = useState<EquipmentReportItem[]>(initialReports);
+  const [loading, setLoading] = useState(true);
+  const [isStaff, setIsStaff] = useState(false);
+
+  useEffect(() => {
+    const checkAccess = async () => {
+      try {
+        const response = await fetch("http://localhost:5000/api/auth/session", {
+          credentials: "include",
+        });
+
+        if (!response.ok) {
+          setIsStaff(false);
+          return;
+        }
+
+        const session = (await response.json()) as SessionResponse;
+        const email = session.user?.email?.toLowerCase() ?? "";
+        const role = session.user?.role?.toLowerCase() ?? "";
+
+        const allowedEmails = ["staff1@example.com"];
+        const hasStaffAccess =
+          role === "staff" || role === "admin" || allowedEmails.includes(email);
+
+        setIsStaff(hasStaffAccess);
+      } catch {
+        setIsStaff(false);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    void checkAccess();
+  }, []);
 
   const handleStatusChange = (
     reportId: number,
@@ -47,6 +88,21 @@ export default function EquipmentReportAdmin() {
       )
     );
   };
+
+  if (loading) {
+    return <main className="equipment-report-page">Loading...</main>;
+  }
+
+  if (!isStaff) {
+    return (
+      <main className="equipment-report-page">
+        <div className="equipment-report-page-header">
+          <h1>Access Denied</h1>
+          <p>Only staff can access this page.</p>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="equipment-report-page">

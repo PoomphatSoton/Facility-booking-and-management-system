@@ -26,6 +26,31 @@ export default function AppNavbar() {
             <Nav.Link as={Link} to="/">
               Home
             </Nav.Link>
+
+            <Nav.Link as={Link} to="/facilities">
+              Facilities
+            </Nav.Link>
+
+            <Nav.Link as={Link} to="/my-bookings">
+              My Bookings
+            </Nav.Link>
+
+            <Nav.Link as={Link} to="/find-partners">
+              Find Partners
+            </Nav.Link>
+
+            <Nav.Link as={Link} to="/partner-requests">
+              Partner Requests
+            </Nav.Link>
+
+            <Nav.Link as={Link} to="/equipment-reports">
+              Equipment Reports
+            </Nav.Link>
+
+            <Nav.Link as={Link} to="/equipment-reports-admin">
+              Equipment Admin
+            </Nav.Link>
+
             <Button variant="outline-danger" onClick={handleLogout}>
               Logout
             </Button>
