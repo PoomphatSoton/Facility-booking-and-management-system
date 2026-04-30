@@ -177,6 +177,23 @@ const updateFacility = async (facilityId, data) => {
       );
     }
 
+    // Delete non-booked slots and replace with new ones
+    await client.query(
+      `DELETE FROM public.facility_slot_times WHERE facility_id = $1 AND is_booking = FALSE`,
+      [facilityId]
+    );
+
+    for (const slot of slotTimes) {
+      await client.query(
+        `
+        INSERT INTO public.facility_slot_times
+          (facility_id, slot_date, slot_start_time, slot_end_time, is_booking)
+        VALUES ($1, $2, $3, $4, $5)
+        `,
+        [facilityId, slot.slotDate, slot.startTime, slot.endTime, slot.isBooking ?? false]
+      );
+    }
+
     await client.query('COMMIT');
 
     return facilityResult.rows[0];
@@ -231,6 +248,7 @@ const createFacility = async (data) => {
       usageGuideline,
       maxPeople,
       schedules = [],
+      slotTimes = [],
     } = data;
 
     const facilityResult = await client.query(
@@ -263,6 +281,17 @@ const createFacility = async (data) => {
           schedule.startTime,
           schedule.endTime,
         ]
+      );
+    }
+
+    for (const slot of slotTimes) {
+      await client.query(
+        `
+        INSERT INTO public.facility_slot_times
+          (facility_id, slot_date, slot_start_time, slot_end_time, is_booking)
+        VALUES ($1, $2, $3, $4, $5)
+        `,
+        [facility.facility_id, slot.slotDate, slot.startTime, slot.endTime, slot.isBooking ?? false]
       );
     }
 
