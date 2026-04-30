@@ -1,3 +1,6 @@
+const pg = require('pg');
+pg.types.setTypeParser(1082, (val) => val);
+
 const { Pool } = require('pg');
 
 const sslConfig =
@@ -52,6 +55,16 @@ const initDb = async () => {
 
   await pool.query(`
     ALTER TABLE public.users
+    ADD COLUMN IF NOT EXISTS firebase_uid TEXT UNIQUE
+  `);
+
+  await pool.query(`
+    ALTER TABLE public.users
+    ALTER COLUMN password_hash DROP NOT NULL
+  `);
+
+  await pool.query(`
+    ALTER TABLE public.users
     ALTER COLUMN first_name DROP NOT NULL,
     ALTER COLUMN last_name DROP NOT NULL,
     ALTER COLUMN date_of_birth DROP NOT NULL,
@@ -77,10 +90,17 @@ const initDb = async () => {
   `);
 
   await pool.query(`
+    ALTER TABLE public.pending_registrations
+    ALTER COLUMN password_hash DROP NOT NULL,
+    ADD COLUMN IF NOT EXISTS firebase_uid TEXT
+  `);
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS public.pending_registrations (
       registration_id TEXT PRIMARY KEY,
       email TEXT NOT NULL UNIQUE,
-      password_hash TEXT NOT NULL,
+      password_hash TEXT,
+      firebase_uid TEXT UNIQUE,
       otp TEXT NOT NULL,
       otp_verified BOOLEAN NOT NULL DEFAULT FALSE,
       created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
@@ -94,13 +114,6 @@ const initDb = async () => {
       email TEXT NOT NULL,
       otp TEXT NOT NULL,
       created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
-    )
-  `);
-
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS public.staff_roles (
-      role_id SERIAL PRIMARY KEY,
-      role_name VARCHAR(100) NOT NULL UNIQUE
     )
   `);
 
@@ -121,8 +134,6 @@ const initDb = async () => {
     CREATE TABLE IF NOT EXISTS public.staff (
       staff_id SERIAL PRIMARY KEY,
       user_id INTEGER NOT NULL UNIQUE REFERENCES public.users(id) ON DELETE CASCADE,
-      role_id INTEGER REFERENCES public.staff_roles(role_id) ON DELETE SET NULL,
-      department_id INTEGER,
       created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
     )
   `);
@@ -156,10 +167,14 @@ const initDb = async () => {
     )
   `);
 
-  // Backfill schema for existing databases created before max_people was introduced.
   await pool.query(`
     ALTER TABLE public.facilities
     ADD COLUMN IF NOT EXISTS max_people INTEGER NOT NULL DEFAULT 1
+  `);
+
+  await pool.query(`
+    ALTER TABLE public.facilities
+    ADD COLUMN IF NOT EXISTS image_url TEXT
   `);
 
   await pool.query(`
@@ -173,7 +188,6 @@ const initDb = async () => {
     )
   `);
 
-  // Backfill schema for existing databases that still include slot_duration.
   await pool.query(`
     ALTER TABLE public.facility_schedules
     DROP COLUMN IF EXISTS slot_duration
@@ -193,7 +207,6 @@ const initDb = async () => {
     )
   `);
 
-  // Backfill schema for existing databases before slot_date was introduced.
   await pool.query(`
     ALTER TABLE public.facility_slot_times
     ADD COLUMN IF NOT EXISTS slot_date DATE NOT NULL DEFAULT CURRENT_DATE

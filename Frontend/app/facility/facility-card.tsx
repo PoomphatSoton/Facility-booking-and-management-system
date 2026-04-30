@@ -1,30 +1,33 @@
 import { useState } from "react";
+import { useNavigate } from "react-router";
 import { Button, Modal } from "react-bootstrap";
 import Card from "react-bootstrap/Card";
+import type { Opening, Slot } from "./facility-list";
 import "./facility.css";
 
 type FacilityCardProps = {
+    facilityId: number;
     name: string;
     description: string;
-    currentOpening: {
-        day: string;
-        startTime: string;
-        endTime: string;
-    };
-    otherOpenings: Array<{
-        day: string;
-        startTime: string;
-        endTime: string;
-    }>;
-    slotToday: string[];
-    slotByDate: Array<{
-        date: string;
-        slots: string[];
-    }>;
+    openings: Opening[];
+    slotToday: Slot[];
+    slotByDate: Array<{ date: string; slots: Slot[] }>;
     maxPeople: number;
     usageGuidelines: string[];
     imageUrl: string;
 };
+
+const DAY_ABBR = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+const getTodayOpening = (openings: Opening[]): Opening | null => {
+    const today = DAY_ABBR[new Date().getDay()];
+    return openings.find((o) => o.day === today) ?? null;
+};
+
+const fmtTime = (d: Date) =>
+    `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+
+const fmtSlot = (slot: Slot) => `${fmtTime(slot.start)}-${fmtTime(slot.end)}`;
 
 const truncateText = (text: string, maxLength: number) => {
     if (text.length <= maxLength) return text;
@@ -32,27 +35,29 @@ const truncateText = (text: string, maxLength: number) => {
 };
 
 export default function FacilityCard({
+    facilityId,
     name,
     description,
-    currentOpening,
-    otherOpenings,
+    openings,
     slotToday,
     slotByDate,
     maxPeople,
     usageGuidelines,
     imageUrl,
 }: FacilityCardProps) {
+    const navigate = useNavigate();
     const [isSlotModalOpen, setIsSlotModalOpen] = useState(false);
     const [isOpeningModalOpen, setIsOpeningModalOpen] = useState(false);
     const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
     const [activeDetailType, setActiveDetailType] = useState<"description" | "guidelines">("description");
     const [selectedSlotDate, setSelectedSlotDate] = useState(slotByDate[0]?.date ?? "");
 
+    const todayOpening = getTodayOpening(openings);
     const visibleSlots = slotToday.slice(0, 3);
     const hiddenSlotsCount = Math.max(slotToday.length - visibleSlots.length, 0);
     const descriptionPreview = truncateText(description, 95);
     const guidelinePreviewText = truncateText(usageGuidelines.join(" • "), 90);
-    const selectedDateSlots = slotByDate.find((slotItem) => slotItem.date === selectedSlotDate)?.slots ?? [];
+    const selectedDateSlots = slotByDate.find((s) => s.date === selectedSlotDate)?.slots ?? [];
     const hasDescriptionOverflow = description.length > 95;
     const hasGuidelineOverflow = usageGuidelines.join(" • ").length > 90;
 
@@ -64,10 +69,7 @@ export default function FacilityCard({
     return (
         <>
             <Card className="card-container">
-                <Card.Img
-                    className="facility-card-image"
-                    src={imageUrl}
-                />
+                <Card.Img className="facility-card-image" src={imageUrl} />
                 <Card.Body className="facility-card-body">
                     <Card.Title className="facility-card-title">{name}</Card.Title>
                     <Card.Text className="facility-card-description">
@@ -82,15 +84,16 @@ export default function FacilityCard({
                             </button>
                         ) : null}
                     </Card.Text>
+
                     <div className="facility-card-meta">
                         <div className="facility-meta-row">
                             <span className="facility-meta-dot" />
                             <span>Availability</span>
                         </div>
                         <div className="facility-meta-value">
-                            {currentOpening.day === "—"
-                                ? <span style={{ color: "#dc3545", fontWeight: 600 }}>Closed today</span>
-                                : `${currentOpening.day} ${currentOpening.startTime}-${currentOpening.endTime}`
+                            {todayOpening
+                                ? `${todayOpening.day}  ${fmtTime(todayOpening.startTime)} – ${fmtTime(todayOpening.endTime)}`
+                                : <span style={{ color: "#dc3545", fontWeight: 600 }}>Closed today</span>
                             }
                         </div>
                         <button
@@ -100,6 +103,7 @@ export default function FacilityCard({
                         >
                             View other days
                         </button>
+
                         <div className="facility-meta-row mt-2">
                             <span className="facility-meta-icon">T</span>
                             <span>Slot today</span>
@@ -109,9 +113,9 @@ export default function FacilityCard({
                         ) : (
                             <>
                                 <div className="facility-slot-list">
-                                    {visibleSlots.map((slotTime) => (
-                                        <span className="facility-slot-chip" key={slotTime}>
-                                            {slotTime}
+                                    {visibleSlots.map((slot) => (
+                                        <span className="facility-slot-chip" key={fmtSlot(slot)}>
+                                            {fmtSlot(slot)}
                                         </span>
                                     ))}
                                     {hiddenSlotsCount > 0 ? (
@@ -130,6 +134,7 @@ export default function FacilityCard({
                             </>
                         )}
                     </div>
+
                     <div className="facility-card-meta">
                         <div className="facility-meta-row">
                             <span className="facility-meta-icon">#</span>
@@ -137,6 +142,7 @@ export default function FacilityCard({
                         </div>
                         <div className="facility-meta-value">{maxPeople} people</div>
                     </div>
+
                     <div className="facility-card-meta">
                         <div className="facility-meta-row">
                             <span className="facility-meta-icon">i</span>
@@ -155,8 +161,11 @@ export default function FacilityCard({
                             ) : null}
                         </div>
                     </div>
+
                     <div className="facility-card-actions">
-                        <Button variant="primary">Book Now</Button>
+                        <Button variant="primary" onClick={() => navigate(`/booking/new/${facilityId}`)}>
+                            Book Now
+                        </Button>
                     </div>
                 </Card.Body>
             </Card>
@@ -167,9 +176,9 @@ export default function FacilityCard({
                 </Modal.Header>
                 <Modal.Body>
                     <ul className="facility-guideline-list">
-                        {otherOpenings.map((opening, index) => (
-                            <li key={`${opening.day}-${opening.startTime}-${index}`}>
-                                {`${opening.day} ${opening.startTime}-${opening.endTime}`}
+                        {openings.map((o, i) => (
+                            <li key={`${o.day}-${i}`}>
+                                {`${o.day}  ${fmtTime(o.startTime)} – ${fmtTime(o.endTime)}`}
                             </li>
                         ))}
                     </ul>
@@ -188,14 +197,13 @@ export default function FacilityCard({
                         type="date"
                         lang="en-GB"
                         value={selectedSlotDate}
-                        onChange={(event) => setSelectedSlotDate(event.target.value)}
+                        onChange={(e) => setSelectedSlotDate(e.target.value)}
                     />
-
                     <div className="facility-modal-slot-list mt-3">
                         {selectedDateSlots.length > 0 ? (
-                            selectedDateSlots.map((slotTime) => (
-                                <span className="facility-slot-chip" key={`${selectedSlotDate}-${slotTime}`}>
-                                    {slotTime}
+                            selectedDateSlots.map((slot) => (
+                                <span className="facility-slot-chip" key={`${selectedSlotDate}-${fmtSlot(slot)}`}>
+                                    {fmtSlot(slot)}
                                 </span>
                             ))
                         ) : (
@@ -216,14 +224,13 @@ export default function FacilityCard({
                         <p className="mb-0">{description}</p>
                     ) : (
                         <ul className="facility-guideline-list">
-                            {usageGuidelines.map((guideline) => (
-                                <li key={guideline}>{guideline}</li>
+                            {usageGuidelines.map((g) => (
+                                <li key={g}>{g}</li>
                             ))}
                         </ul>
                     )}
                 </Modal.Body>
             </Modal>
-
         </>
     );
 }
