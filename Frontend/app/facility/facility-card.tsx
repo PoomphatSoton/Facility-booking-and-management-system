@@ -92,7 +92,7 @@ export default function FacilityCard({
                         </div>
                         <div className="facility-meta-value">
                             {todayOpening
-                                ? `${todayOpening.day} ${todayOpening.startTime}–${todayOpening.endTime}`
+                                ? `${todayOpening.day}  ${fmtTime(todayOpening.startTime)} – ${fmtTime(todayOpening.endTime)}`
                                 : <span style={{ color: "#dc3545", fontWeight: 600 }}>Closed today</span>
                             }
                         </div>

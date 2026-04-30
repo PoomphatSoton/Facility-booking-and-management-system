@@ -15,7 +15,6 @@ router.use('/db', dbRoutes);
 router.use('/facilities', facilityRoutes);
 router.use('/equipment-reports', equipmentReportRoutes);
 router.use('/partner-matching', partnerMatchingRoutes);
-router.use('/bookings', bookingRoutes);
 router.use('/staff-management', staffManagementRoutes);
 router.use('/notifications', notificationRoutes);
 router.use('/profile', profileRoutes);

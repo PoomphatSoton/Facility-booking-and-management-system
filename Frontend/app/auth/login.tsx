@@ -26,7 +26,7 @@ export default function Login() {
       const { user } = await authService.login(email, password);
       navigate(user.role === "admin" ? "/admin" : "/");
     } catch (error) {
-      console.log("ssssssssssssssssssssssFirebase login error:", error);
+      console.log("Firebase login error:", error);
       const apiError = error as ApiError;
 
       if (apiError.message?.startsWith("auth/")) {
