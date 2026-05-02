@@ -5,8 +5,8 @@ const { requireAuth } = require('../middlewares/auth.middleware');
 const router = express.Router();
 
 router.get('/cards', requireAuth, facilityController.getFacilityCards);
-router.put('/:facilityId', facilityController.updateFacility);
-router.delete('/:facilityId', facilityController.deleteFacility);
-router.post('/', facilityController.createFacility);
+router.put('/:facilityId', requireAuth, facilityController.updateFacility);
+router.delete('/:facilityId', requireAuth, facilityController.deleteFacility);
+router.post('/', requireAuth, facilityController.createFacility);
 
 module.exports = router;

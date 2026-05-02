@@ -66,6 +66,8 @@ const registerCredentials = async ({ firebaseUid, email }) => {
     role: 'member',
   });
 
+  await userStore.createMember(user.id);
+
   return {
     nextStep: 'verifyEmail',
     message: 'User created. Please verify your email.',

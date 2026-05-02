@@ -13,7 +13,7 @@ export default function AppNavbar() {
   const isAdmin = user?.role === "admin";
   const isStaff = user?.role === "staff";
   const isMember = user?.role === "member";
-  
+
   const handleLogout = async () => {
     try {
       await authService.logout();
@@ -28,21 +28,24 @@ export default function AppNavbar() {
         <Navbar.Brand as={Link} to="/">
           {APP_BRAND_NAME}
         </Navbar.Brand>
+
         <Navbar.Toggle aria-controls="global-navbar" />
+
         <Navbar.Collapse id="global-navbar">
           <Nav className="ms-auto align-items-lg-center gap-2">
-            { isAdmin && (
+            {isAdmin && (
               <>
                 <Nav.Link as={Link} to="/admin">
                   Facilities
                 </Nav.Link>
+
                 <Nav.Link as={Link} to="/admin/staff">
                   Staff
                 </Nav.Link>
               </>
             )}
 
-            { isMember && (
+            {isMember && (
               <>
                 <Nav.Link as={Link} to="/">
                   Home
@@ -50,16 +53,30 @@ export default function AppNavbar() {
                 <Nav.Link as={Link} to="/booking/my">
                   My Bookings
                 </Nav.Link>
-                <NotificationBell />
-                <Nav.Link as={Link} to="/profile" style={{ padding: 0 }}>
-                  <img src={profileIcon} alt="Profile" style={{ width: '24px'}} />
+
+                <Nav.Link as={Link} to="/find-partners">
+                  Find Partners
                 </Nav.Link>
+
+                <Nav.Link as={Link} to="/partner-requests">
+                  Partner Requests
+                </Nav.Link>
+
+                <Nav.Link as={Link} to="/equipment-reports">
+                  Equipment Reports
+                </Nav.Link>
+
+                <Nav.Link as={Link} to="/equipment-reports-admin">
+                  Equipment Admin
+                </Nav.Link>
+
+                <NotificationBell />
               </>
             )}
 
-            { isStaff && (
+            {isStaff && (
               <>
-                <Nav.Link as={Link} to="/staff">
+                <Nav.Link as={Link} to="/staff/pending">
                   Staff Dashboard
                 </Nav.Link>
                 <Nav.Link as={Link} to="/staff/upcoming">
@@ -67,7 +84,9 @@ export default function AppNavbar() {
                 </Nav.Link>
               </>
             )}
-
+            <Nav.Link as={Link} to="/profile" style={{ padding: 0 }}>
+              <img src={profileIcon} alt="Profile" style={{ width: "24px" }} />
+            </Nav.Link>
             <Button variant="outline-danger" onClick={handleLogout}>
               Logout
             </Button>
