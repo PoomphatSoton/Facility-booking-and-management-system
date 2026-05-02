@@ -15,7 +15,6 @@ const getAllStaff = async (req, res) => {
 
 const createStaff = async (req, res) => {
   try {
-    console.log("Received request to create staff with data: ", req.body);
     const { username, name, password, facilityIds = [] } = req.body;
 
     if (!username || !name || !password) {
@@ -26,7 +25,6 @@ const createStaff = async (req, res) => {
     }
 
     const result = await staffManagementService.createStaff({ username, name, password, facilityIds });
-    console.log("Staff created successfully with result: ", result);
     return res.status(201).json({
       status: 'ok',
       message: 'Staff created successfully',
@@ -45,7 +43,6 @@ const createStaff = async (req, res) => {
 const updateStaff = async (req, res) => {
   try {
     const staffId = Number(req.params.staffId);
-    console.log(`Received request to update staff ${staffId} with data: `, req.body);
     if (!staffId) {
       return res.status(400).json({ 
         status: 'error', 

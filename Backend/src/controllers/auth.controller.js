@@ -43,8 +43,8 @@ const me = async (req, res) => {
 };
 
 const sessionStatus = async (req, res) => {
+  console.log("Session status check for user:", req.user);
   const user = req.user;
-
   const isPendingStep3 =
     !user.firstName || !user.lastName || !user.dateOfBirth || !user.address;
 
@@ -55,9 +55,20 @@ const sessionStatus = async (req, res) => {
   });
 };
 
+const googleSync = async (req, res) => {
+  try {
+    const { firebaseUid, email, firstName, lastName } = req.body;
+    const result = await authService.googleSync({ firebaseUid, email, firstName, lastName });
+    return res.status(200).json(result);
+  } catch (error) {
+    return res.status(error.statusCode || 400).json(formatErrorResponse(error, 'Google sync failed'));
+  }
+};
+
 module.exports = {
   registerCredentials,
   completeRegisterDetails,
   me,
   sessionStatus,
+  googleSync,
 };

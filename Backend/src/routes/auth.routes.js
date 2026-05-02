@@ -11,6 +11,7 @@ router.post(
   authController.completeRegisterDetails
 );
 
+router.post('/google-sync', authController.googleSync);
 router.get('/session', authMiddleware.requireAuth, authController.sessionStatus);
 router.get('/me', authMiddleware.requireAuth, authController.me);
 

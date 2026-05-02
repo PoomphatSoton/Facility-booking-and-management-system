@@ -22,7 +22,7 @@ export function Guard({ allow, children }: RoleGuardProps) {
   }
 
     if (user.role === "staff" && !allow.includes("staff")) {
-    return <Navigate to="/staff" replace />;
+    return <Navigate to="/staff/pending" replace />;
   }
 
   return children;

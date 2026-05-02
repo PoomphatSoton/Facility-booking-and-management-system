@@ -4,9 +4,7 @@ const userStore = require("../store/user.store");
 const requireAuth = async (req, res, next) => {
   const authHeader = req.headers.authorization || "";
   const [scheme, token] = authHeader.split(" ");
-  console.log("Authorization header:");
   if (scheme !== "Bearer" || !token) {
-    console.log("Missing or invalid Authorization header");
     return res.status(401).json({ message: "missing or invalid token" });
   }
 

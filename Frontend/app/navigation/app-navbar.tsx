@@ -70,10 +70,6 @@ export default function AppNavbar() {
                   Equipment Reports
                 </Nav.Link>
 
-                <Nav.Link as={Link} to="/equipment-reports-admin">
-                  Equipment Admin
-                </Nav.Link>
-
                 <NotificationBell />
               </>
             )}
@@ -85,6 +81,9 @@ export default function AppNavbar() {
                 </Nav.Link>
                 <Nav.Link as={Link} to="/staff/upcoming">
                   Manage Sessions
+                </Nav.Link>
+                <Nav.Link as={Link} to="/equipment-reports-admin">
+                  Equipment Admin
                 </Nav.Link>
               </>
             )}

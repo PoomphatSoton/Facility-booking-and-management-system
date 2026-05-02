@@ -105,7 +105,36 @@ const completeRegisterDetails = async ({
   };
 };
 
+const googleSync = async ({ firebaseUid, email, firstName, lastName }) => {
+  if (!firebaseUid || !email) throw buildError('firebaseUid and email are required', 400);
+
+  let user = await userStore.findByFirebaseUid(firebaseUid);
+
+  if (!user) {
+    user = await userStore.findByEmail(email);
+  }
+
+  if (!user) {
+    user = await userStore.create({
+      firebaseUid,
+      email,
+      firstName: firstName || null,
+      lastName: lastName || null,
+      dateOfBirth: null,
+      address: null,
+      role: 'member',
+    });
+    await userStore.createMember(user.id);
+  }
+
+  return {
+    user: toPublicUser(user),
+    nextStep: isProfileIncomplete(user) ? 'details' : null,
+  };
+};
+
 module.exports = {
   registerCredentials,
   completeRegisterDetails,
+  googleSync,
 };
