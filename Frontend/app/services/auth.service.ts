@@ -1,70 +1,84 @@
+import {
+  signInWithEmailAndPassword,
+  signOut,
+  sendPasswordResetEmail,
+  updatePassword,
+  EmailAuthProvider,
+  reauthenticateWithCredential,
+} from "firebase/auth";
+import { firebaseAuth } from "../config/firebase";
 import { api } from "./http";
 import type {
-  CompleteRegisterResponse,
+  User,
   CompleteRegisterRequest,
-  ForgotPasswordRequestRequest,
-  ForgotPasswordRequestResponse,
-  ForgotPasswordVerifyRequest,
-  ForgotPasswordVerifyResponse,
-  ForgotPasswordResetRequest,
-  ForgotPasswordResetResponse,
-  ForgotPasswordResendOtpRequest,
-  ForgotPasswordResendOtpResponse,
-  LoginRequest,
-  LoginResponse,
-  MeResponse,
-  SessionStatusResponse,
+  CompleteRegisterResponse,
   RegisterCredentialsRequest,
   RegisterCredentialsResponse,
-  ResendOtpRequest,
-  ResendOtpResponse,
-  VerifyOtpRequest,
-  VerifyOtpResponse,
+  SessionStatusResponse,
+  MeResponse,
 } from "./types";
 
 export const authService = {
-  registerCredentials: async (body: RegisterCredentialsRequest) => {
+  registerCredentials: async (
+    body: RegisterCredentialsRequest,
+  ): Promise<RegisterCredentialsResponse> => {
     const { data } = await api.post<RegisterCredentialsResponse>(
       "/auth/register/credentials",
-      body
+      body,
     );
+
     return data;
   },
 
-  verifyOtp: async (body: VerifyOtpRequest) => {
-    const { data } = await api.post<VerifyOtpResponse>("/auth/register/otp", body);
-    return data;
-  },
-
-  resendOtp: async (body: ResendOtpRequest) => {
-    const { data } = await api.post<ResendOtpResponse>("/auth/register/resend-otp", body);
-    return data;
-  },
-
-  completeRegister: async (body: CompleteRegisterRequest) => {
+  completeRegister: async (
+    body: CompleteRegisterRequest,
+  ): Promise<CompleteRegisterResponse> => {
     const { data } = await api.post<CompleteRegisterResponse>(
       "/auth/register/details",
-      body
+      body,
     );
+
     return data;
   },
 
-  login: async (body: LoginRequest) => {
-    const { data } = await api.post<LoginResponse>("/auth/login", body);
+  login: async (email: string, password: string): Promise<{ user: User }> => {
+    const credential = await signInWithEmailAndPassword(
+      firebaseAuth,
+      email,
+      password,
+    );
+
+    if (!credential.user.emailVerified) {
+      await signOut(firebaseAuth);
+      throw new Error("Please verify your email before logging in.");
+    }
+    const token = await credential.user.getIdToken(true);
+    console.log("Firebase ID token Frontend:", token);
+    const { data } = await api.get<{ user: User }>("/auth/me");
     return data;
   },
 
-  logout: async () => {
-    await api.post("/auth/logout");
+  logout: async (): Promise<void> => {
+    await signOut(firebaseAuth);
   },
 
-  me: async () => {
+  me: async (): Promise<MeResponse> => {
     const { data } = await api.get<MeResponse>("/auth/me");
     return data;
   },
 
-  checkLogin: async () => {
+  checkLogin: async (): Promise<SessionStatusResponse> => {
     try {
+      if (!firebaseAuth.currentUser) {
+        return { isLoggedIn: false, isPendingStep3: false, user: null };
+      }
+
+      await firebaseAuth.currentUser.reload();
+
+      if (!firebaseAuth.currentUser.emailVerified) {
+        return { isLoggedIn: false, isPendingStep3: false, user: null };
+      }
+
       const { data } = await api.get<SessionStatusResponse>("/auth/session");
       return data;
     } catch {
@@ -72,23 +86,26 @@ export const authService = {
     }
   },
 
-  forgotPasswordRequest: async (body: ForgotPasswordRequestRequest) => {
-    const { data } = await api.post<ForgotPasswordRequestResponse>("/auth/forgot-password/request", body);
-    return data;
+  forgotPassword: async (email: string): Promise<void> => {
+    await sendPasswordResetEmail(firebaseAuth, email);
   },
 
-  forgotPasswordVerify: async (body: ForgotPasswordVerifyRequest) => {
-    const { data } = await api.post<ForgotPasswordVerifyResponse>("/auth/forgot-password/verify", body);
-    return data;
-  },
+  changePassword: async (
+    currentPassword: string,
+    newPassword: string,
+  ): Promise<void> => {
+    const currentUser = firebaseAuth.currentUser;
 
-  forgotPasswordReset: async (body: ForgotPasswordResetRequest) => {
-    const { data } = await api.post<ForgotPasswordResetResponse>("/auth/forgot-password/reset", body);
-    return data;
-  },
+    if (!currentUser?.email) {
+      throw new Error("Not logged in");
+    }
 
-  forgotPasswordResendOtp: async (body: ForgotPasswordResendOtpRequest) => {
-    const { data } = await api.post<ForgotPasswordResendOtpResponse>("/auth/forgot-password/resend-otp", body);
-    return data;
+    const credential = EmailAuthProvider.credential(
+      currentUser.email,
+      currentPassword,
+    );
+
+    await reauthenticateWithCredential(currentUser, credential);
+    await updatePassword(currentUser, newPassword);
   },
 };
