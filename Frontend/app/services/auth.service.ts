@@ -1,12 +1,13 @@
 import {
   signInWithEmailAndPassword,
+  signInWithPopup,
   signOut,
   sendPasswordResetEmail,
   updatePassword,
   EmailAuthProvider,
   reauthenticateWithCredential,
 } from "firebase/auth";
-import { firebaseAuth } from "../config/firebase";
+import { firebaseAuth, googleProvider } from "../config/firebase";
 import { api } from "./http";
 import type {
   User,
@@ -53,8 +54,18 @@ export const authService = {
       throw new Error("Please verify your email before logging in.");
     }
     const token = await credential.user.getIdToken(true);
-    console.log("Firebase ID token Frontend:", token);
     const { data } = await api.get<{ user: User }>("/auth/me");
+    return data;
+  },
+
+  loginWithGoogle: async (): Promise<{ user: User; nextStep: string | null }> => {
+    const credential = await signInWithPopup(firebaseAuth, googleProvider);
+    const { uid, email, displayName } = credential.user;
+    const [firstName, ...rest] = (displayName ?? "").split(" ");
+    const { data } = await api.post<{ user: User; nextStep: string | null }>(
+      "/auth/google-sync",
+      { firebaseUid: uid, email, firstName: firstName || "", lastName: rest.join(" ") || "" }
+    );
     return data;
   },
 

@@ -1,6 +1,6 @@
-const { pool } = require('../config/db');
+const { pool } = require("../config/db");
 
-const DAY_NAMES = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+const DAY_NAMES = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
 
 const getDayOfWeekLabel = (date) => DAY_NAMES[date.getDay()];
 
@@ -19,7 +19,7 @@ const getSlotTime = async ({ facilityIds, slotDate }) => {
         AND is_booking = FALSE
       ORDER BY facility_id, slot_start_time
     `,
-    [facilityIds, slotDate]
+    [facilityIds, slotDate],
   );
 
   const slotMap = new Map();
@@ -49,7 +49,7 @@ const getAvailableTime = async ({ facilityIds }) => {
       GROUP BY facility_id, day_of_week
       ORDER BY facility_id, ARRAY_POSITION(ARRAY['sun','mon','tue','wed','thu','fri','sat'], day_of_week)
     `,
-    [facilityIds]
+    [facilityIds],
   );
 
   const availableMap = new Map();
@@ -79,7 +79,7 @@ const getFacilityCards = async () => {
         max_people
       FROM public.facilities
       ORDER BY facility_id ASC
-    `
+    `,
   );
 
   const facilities = facilityResult.rows;
@@ -88,7 +88,6 @@ const getFacilityCards = async () => {
   const today = new Date();
   const slotDate = today.toISOString().slice(0, 10);
   const dayOfWeek = getDayOfWeekLabel(today);
-  console.log("day of week", dayOfWeek);
   const [slotTimesByFacility, allSchedulesByFacility] = await Promise.all([
     getSlotTime({ facilityIds, slotDate }),
     getAvailableTime({ facilityIds }),
@@ -97,7 +96,6 @@ const getFacilityCards = async () => {
   return facilities.map((facility) => {
     const allSchedules = allSchedulesByFacility.get(facility.facility_id) || [];
     const availableTime = allSchedules.find((s) => s.day === dayOfWeek) || null;
-    console.log("availableTime = ", availableTime);
     const otherAvailableTimes = allSchedules.filter((s) => s.day !== dayOfWeek);
 
     return {
@@ -119,7 +117,7 @@ const updateFacility = async (facilityId, data) => {
   const client = await pool.connect();
 
   try {
-    await client.query('BEGIN');
+    await client.query("BEGIN");
 
     const {
       name,
@@ -130,7 +128,6 @@ const updateFacility = async (facilityId, data) => {
       schedules = [],
       slotTimes = [],
     } = data;
-// Update facility details
     const facilityResult = await client.query(
       `
       UPDATE public.facilities
@@ -150,20 +147,19 @@ const updateFacility = async (facilityId, data) => {
         maxPeople,
         imageUrl ?? null,
         facilityId,
-      ]
+      ],
     );
 
     if (facilityResult.rows.length === 0) {
-      throw new Error('Facility not found');
+      throw new Error("Facility not found");
     }
 
-// delete old schedules and insert new one
     await client.query(
       `
       DELETE FROM public.facility_schedules
       WHERE facility_id = $1
       `,
-      [facilityId]
+      [facilityId],
     );
 
     for (const schedule of schedules) {
@@ -173,19 +169,14 @@ const updateFacility = async (facilityId, data) => {
           (facility_id, day_of_week, start_time, end_time)
         VALUES ($1, $2, $3, $4)
         `,
-        [
-          facilityId,
-          schedule.dayOfWeek,
-          schedule.startTime,
-          schedule.endTime,
-        ]
+        [facilityId, schedule.dayOfWeek, schedule.startTime, schedule.endTime],
       );
     }
 
     // Delete non-booked slots and replace with new ones
     await client.query(
       `DELETE FROM public.facility_slot_times WHERE facility_id = $1 AND is_booking = FALSE`,
-      [facilityId]
+      [facilityId],
     );
 
     for (const slot of slotTimes) {
@@ -195,15 +186,21 @@ const updateFacility = async (facilityId, data) => {
           (facility_id, slot_date, slot_start_time, slot_end_time, is_booking)
         VALUES ($1, $2, $3, $4, $5)
         `,
-        [facilityId, slot.slotDate, slot.startTime, slot.endTime, slot.isBooking ?? false]
+        [
+          facilityId,
+          slot.slotDate,
+          slot.startTime,
+          slot.endTime,
+          slot.isBooking ?? false,
+        ],
       );
     }
 
-    await client.query('COMMIT');
+    await client.query("COMMIT");
 
     return facilityResult.rows[0];
   } catch (error) {
-    await client.query('ROLLBACK');
+    await client.query("ROLLBACK");
     throw error;
   } finally {
     client.release();
@@ -214,7 +211,7 @@ const deleteFacility = async (facilityId) => {
   const client = await pool.connect();
 
   try {
-    await client.query('BEGIN');
+    await client.query("BEGIN");
 
     const result = await client.query(
       `
@@ -222,18 +219,18 @@ const deleteFacility = async (facilityId) => {
       WHERE facility_id = $1
       RETURNING *
       `,
-      [facilityId]
+      [facilityId],
     );
 
     if (result.rows.length === 0) {
-      throw new Error('Facility not found');
+      throw new Error("Facility not found");
     }
 
-    await client.query('COMMIT');
+    await client.query("COMMIT");
 
     return result.rows[0];
   } catch (error) {
-    await client.query('ROLLBACK');
+    await client.query("ROLLBACK");
     throw error;
   } finally {
     client.release();
@@ -241,11 +238,10 @@ const deleteFacility = async (facilityId) => {
 };
 
 const createFacility = async (data) => {
-  console.log("createFacility data = ", data);
   const client = await pool.connect();
 
   try {
-    await client.query('BEGIN');
+    await client.query("BEGIN");
 
     const {
       name,
@@ -270,7 +266,7 @@ const createFacility = async (data) => {
         usageGuideline ?? null,
         imageUrl ?? null,
         maxPeople,
-      ]
+      ],
     );
 
     const facility = facilityResult.rows[0];
@@ -287,7 +283,7 @@ const createFacility = async (data) => {
           schedule.dayOfWeek,
           schedule.startTime,
           schedule.endTime,
-        ]
+        ],
       );
     }
 
@@ -298,15 +294,21 @@ const createFacility = async (data) => {
           (facility_id, slot_date, slot_start_time, slot_end_time, is_booking)
         VALUES ($1, $2, $3, $4, $5)
         `,
-        [facility.facility_id, slot.slotDate, slot.startTime, slot.endTime, slot.isBooking ?? false]
+        [
+          facility.facility_id,
+          slot.slotDate,
+          slot.startTime,
+          slot.endTime,
+          slot.isBooking ?? false,
+        ],
       );
     }
 
-    await client.query('COMMIT');
+    await client.query("COMMIT");
 
     return facility;
   } catch (error) {
-    await client.query('ROLLBACK');
+    await client.query("ROLLBACK");
     throw error;
   } finally {
     client.release();
@@ -319,5 +321,5 @@ module.exports = {
   getFacilityCards,
   updateFacility,
   deleteFacility,
-  createFacility
+  createFacility,
 };

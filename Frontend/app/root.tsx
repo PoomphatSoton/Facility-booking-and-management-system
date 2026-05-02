@@ -11,7 +11,7 @@ import {
 import type { Route } from "./+types/root";
 import "./app.css";
 import "bootstrap/dist/css/bootstrap.min.css";
-import AppNavbar from "./component/app-navbar";
+import AppNavbar from "./navigation/app-navbar";
 import { AuthProvider } from "./auth/auth-middleware";
 
 export const links: Route.LinksFunction = () => [

@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useAuth } from "~/auth/auth-middleware";
 import type {
   EquipmentReportItem,
   EquipmentReportStatus,
@@ -32,49 +33,11 @@ const initialReports: EquipmentReportItem[] = [
   },
 ];
 
-type SessionResponse = {
-  isLoggedIn?: boolean;
-  user?: {
-    email?: string;
-    role?: string;
-  };
-};
-
 export default function EquipmentReportAdmin() {
+  const { user, loading } = useAuth();
   const [reports, setReports] = useState<EquipmentReportItem[]>(initialReports);
-  const [loading, setLoading] = useState(true);
-  const [isStaff, setIsStaff] = useState(false);
 
-  useEffect(() => {
-    const checkAccess = async () => {
-      try {
-        const response = await fetch("http://localhost:5000/api/auth/session", {
-          credentials: "include",
-        });
-
-        if (!response.ok) {
-          setIsStaff(false);
-          return;
-        }
-
-        const session = (await response.json()) as SessionResponse;
-        const email = session.user?.email?.toLowerCase() ?? "";
-        const role = session.user?.role?.toLowerCase() ?? "";
-
-        const allowedEmails = ["staff1@example.com"];
-        const hasStaffAccess =
-          role === "staff" || role === "admin" || allowedEmails.includes(email);
-
-        setIsStaff(hasStaffAccess);
-      } catch {
-        setIsStaff(false);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    void checkAccess();
-  }, []);
+  const isStaff = user?.role === "staff" || user?.role === "admin";
 
   const handleStatusChange = (
     reportId: number,

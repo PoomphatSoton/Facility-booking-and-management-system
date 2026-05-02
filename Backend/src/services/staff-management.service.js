@@ -75,11 +75,9 @@ const createStaff = async ({ username, name, password, facilityIds = [] }) => {
         VALUES ($1, $2)
         `,[staffId, facilityId]);
         }
-        console.log("Created staff with ID: ", staffId);
         await client.query('COMMIT');
         return { staffId, userId };
     } catch (error) {
-        console.log("Error creating staff: ", error);
         await client.query('ROLLBACK');
         throw error;
     } finally {
@@ -96,7 +94,6 @@ const updateStaff = async (staffId, { username, name, password, facilityIds = []
             `SELECT user_id FROM public.staff WHERE staff_id = $1`,
             [staffId]
         );
-        console.log("staffResult = ", staffResult);
 
         if (staffResult.rows.length === 0) {
             throw new Error('Staff not found');

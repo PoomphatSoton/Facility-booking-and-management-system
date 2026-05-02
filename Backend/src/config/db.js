@@ -23,22 +23,7 @@ const buildPoolConfig = () => {
 
 const pool = new Pool(buildPoolConfig());
 
-const logConnectionInfo = async () => {
-  const { rows } = await pool.query(`
-    SELECT
-      current_database() AS database_name,
-      current_schema() AS schema_name,
-      current_user AS user_name
-  `);
-
-  const info = rows[0];
-  console.log(
-    `[db] connected database=${info.database_name} schema=${info.schema_name} user=${info.user_name}`
-  );
-};
-
 const initDb = async () => {
-  await logConnectionInfo();
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS public.users (

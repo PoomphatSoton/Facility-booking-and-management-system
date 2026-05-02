@@ -4,10 +4,6 @@ export default [
   layout("routes/member-layout.tsx", [
     route("", "facility/facility-list.tsx"),
     route("equipment-reports", "equipment-report/equipment-report-list.tsx"),
-    route(
-      "equipment-reports-admin",
-      "equipment-report/equipment-report-admin.tsx",
-    ),
     route("find-partners", "partner-matching/find-partners.tsx"),
     route("partner-requests", "partner-matching/partner-requests.tsx"),
     route("find-partners/:partnerId", "partner-matching/partner-profile.tsx"),
@@ -19,6 +15,10 @@ export default [
   layout("routes/staff-layout.tsx", [
     route("staff/pending", "staff/pending-requests.tsx"),
     route("staff/upcoming", "staff/upcoming-bookings.tsx"),
+    route(
+      "equipment-reports-admin",
+      "equipment-report/equipment-report-admin.tsx",
+    ),
   ]),
 
   layout("routes/admin-layout.tsx", [
@@ -44,7 +44,3 @@ export default [
     route("auth/forgot-password", "auth/forgot-password.tsx"),
   ]),
 ] satisfies RouteConfig;
-
-
-
-

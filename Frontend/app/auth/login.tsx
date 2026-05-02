@@ -9,6 +9,7 @@ import {
   APP_BRAND_TAGLINE,
 } from "~/constants/app.constants";
 import type { ApiError } from "~/services/types";
+import googleIcon from "~/image/google.png";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -16,6 +17,24 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+
+  const handleGoogleLogin = async () => {
+    setErrorMessage("");
+    setIsSubmitting(true);
+    try {
+      const { user, nextStep } = await authService.loginWithGoogle();
+      if (nextStep === "details") {
+        navigate("/auth/register?step=3");
+      } else {
+        navigate(user.role === "admin" ? "/admin" : "/");
+      }
+    } catch (error) {
+      const apiError = error as ApiError;
+      setErrorMessage(apiError.message || "Google login failed");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -26,7 +45,6 @@ export default function Login() {
       const { user } = await authService.login(email, password);
       navigate(user.role === "admin" ? "/admin" : "/");
     } catch (error) {
-      console.log("Firebase login error:", error);
       const apiError = error as ApiError;
 
       if (apiError.message?.startsWith("auth/")) {
@@ -102,6 +120,21 @@ export default function Login() {
                 )}
               </Button>
             </Form>
+
+            <div className="auth-divider">
+              <span>or</span>
+            </div>
+
+            <Button
+              variant="outline-secondary"
+              size="lg"
+              className="w-100 mb-3 d-flex align-items-center justify-content-center gap-2"
+              onClick={handleGoogleLogin}
+              disabled={isSubmitting}
+            >
+              <img src={googleIcon} alt="Google" style={{ width: 20, height: 20 }} />
+              Continue with Google
+            </Button>
 
             <p className="auth-footer">
               Don&apos;t have an account?{" "}
