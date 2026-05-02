@@ -11,12 +11,7 @@ const requireAuth = async (req, res, next) => {
   }
 
   try {
-    // const token2 = await auth.user.getIdToken(true);
-    console.log("Decoded token:", token);
-    console.log("isSame:");
-    console.log("Verifying token with Firebase");
     const decoded = await auth.verifyIdToken(token);
-    console.log("Decoded token:", decoded);
     if (!decoded.email_verified) {
       return res.status(403).json({ message: "email is not verified" });
     }

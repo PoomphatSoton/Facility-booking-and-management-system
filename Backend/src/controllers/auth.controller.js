@@ -1,5 +1,4 @@
 const authService = require('../services/auth.service');
-const otpMailService = require('../services/otp-mail.service');
 
 const formatErrorResponse = (error, fallbackMessage) => ({
   message: error.message || fallbackMessage,

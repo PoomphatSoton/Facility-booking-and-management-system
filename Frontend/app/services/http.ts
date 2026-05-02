@@ -11,7 +11,6 @@ export const api = axios.create({
   },
 });
 
-// Attach Firebase ID token to every request automatically
 api.interceptors.request.use(async (config) => {
   const currentUser = firebaseAuth.currentUser;
   if (currentUser) {

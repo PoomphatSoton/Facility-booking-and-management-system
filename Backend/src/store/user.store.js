@@ -116,6 +116,14 @@ const updateProfileById = async (
   return rows[0] ? mapUser(rows[0]) : null;
 };
 
+const createMember = async (userId) => {
+  const { rows } = await pool.query(
+    `INSERT INTO public.members (user_id) VALUES ($1) ON CONFLICT (user_id) DO NOTHING RETURNING *`,
+    [userId]
+  );
+  return rows[0] ?? null;
+};
+
 const reset = async () => {
   await pool.query(
     'TRUNCATE TABLE public.users RESTART IDENTITY CASCADE',
@@ -124,6 +132,7 @@ const reset = async () => {
 
 module.exports = {
   create,
+  createMember,
   findByEmail,
   findByFirebaseUid,
   findById,
