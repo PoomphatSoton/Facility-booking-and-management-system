@@ -18,6 +18,33 @@ const getMemberIdByUserId = async (userId) => {
   return result.rows[0].member_id;
 };
 
+const getPartners = async ({ userId }) => {
+  const currentMemberId = await getMemberIdByUserId(userId);
+
+  const result = await pool.query(
+    `
+      SELECT
+        m.member_id,
+        u.id AS user_id,
+        u.first_name,
+        u.last_name,
+        u.email,
+        'Not specified' AS sport,
+        'Not specified' AS skill_level,
+        'Not specified' AS availability,
+        'Not specified' AS preferred_time,
+        '' AS bio
+      FROM public.members m
+      JOIN public.users u ON m.user_id = u.id
+      WHERE m.member_id <> $1
+      ORDER BY u.first_name, u.last_name
+    `,
+    [currentMemberId]
+  );
+
+  return result.rows;
+};
+
 const createMatchRequest = async ({ senderUserId, receiverMemberId }) => {
   const senderMemberId = await getMemberIdByUserId(senderUserId);
 
@@ -86,6 +113,7 @@ const updateRequestStatus = async ({ userId, requestId, status }) => {
 };
 
 module.exports = {
+  getPartners,
   createMatchRequest,
   getIncomingRequests,
   updateRequestStatus,

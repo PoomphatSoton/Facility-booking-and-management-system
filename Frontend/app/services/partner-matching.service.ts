@@ -2,6 +2,24 @@ import { api } from "./http";
 
 export type PartnerRequestStatus = "pending" | "accepted" | "rejected";
 
+export interface PartnerItem {
+  member_id: number;
+  user_id?: number;
+  first_name?: string | null;
+  last_name?: string | null;
+  email?: string | null;
+  sport?: string | null;
+  skill_level?: string | null;
+  availability?: string | null;
+  preferred_time?: string | null;
+  bio?: string | null;
+}
+
+export interface PartnersResponse {
+  message: string;
+  data: PartnerItem[];
+}
+
 export interface IncomingPartnerRequestItem {
   request_matching_id: number;
   status: PartnerRequestStatus;
@@ -18,6 +36,13 @@ export interface IncomingPartnerRequestResponse {
 }
 
 export const partnerMatchingService = {
+  getPartners: async () => {
+    const { data } = await api.get<PartnersResponse>(
+      "/partner-matching/partners"
+    );
+    return data;
+  },
+
   createMatchRequest: async (receiverMemberId: number) => {
     const { data } = await api.post("/partner-matching/requests", {
       receiverMemberId,

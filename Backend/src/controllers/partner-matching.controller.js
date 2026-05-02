@@ -1,5 +1,22 @@
 const partnerMatchingService = require('../services/partner-matching.service');
 
+const getPartners = async (req, res) => {
+  try {
+    const partners = await partnerMatchingService.getPartners({
+      userId: req.user.id,
+    });
+
+    return res.status(200).json({
+      message: 'partners fetched',
+      data: partners,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      message: error.message || 'failed to get partners',
+    });
+  }
+};
+
 const createMatchRequest = async (req, res) => {
   try {
     const { receiverMemberId } = req.body;
@@ -66,6 +83,7 @@ const updateRequestStatus = async (req, res) => {
 };
 
 module.exports = {
+  getPartners,
   createMatchRequest,
   getIncomingRequests,
   updateRequestStatus,

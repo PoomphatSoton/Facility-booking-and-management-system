@@ -4,6 +4,12 @@ const authMiddleware = require('../middlewares/auth.middleware');
 
 const router = express.Router();
 
+router.get(
+  '/partners',
+  authMiddleware.requireAuth,
+  partnerMatchingController.getPartners
+);
+
 router.post(
   '/requests',
   authMiddleware.requireAuth,

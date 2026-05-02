@@ -1,103 +1,120 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router";
-import { partnerMatchingService } from "../services/partner-matching.service";
+import {
+  partnerMatchingService,
+  type PartnerItem,
+} from "../services/partner-matching.service";
 import "./partner-matching.css";
 
-type PartnerItem = {
-  id: number;
-  memberId: number;
-  name: string;
-  sport: string;
-  skillLevel: string;
-  availability: string;
-  preferredTime: string;
-  bio: string;
-};
-
-const mockPartners: PartnerItem[] = [
-  {
-    id: 1,
-    memberId: 1,
-    name: "Alex Chen",
-    sport: "Badminton",
-    skillLevel: "Intermediate",
-    availability: "Weekdays",
-    preferredTime: "Evenings",
-    bio: "Looking for casual badminton games after class.",
-  },
-  {
-    id: 2,
-    memberId: 2,
-    name: "Sarah Khan",
-    sport: "Football",
-    skillLevel: "Beginner",
-    availability: "Weekends",
-    preferredTime: "Afternoons",
-    bio: "Interested in friendly football matches on weekends.",
-  },
-  {
-    id: 3,
-    memberId: 3,
-    name: "James Lee",
-    sport: "Squash",
-    skillLevel: "Advanced",
-    availability: "Weekdays",
-    preferredTime: "Mornings",
-    bio: "Competitive squash player seeking regular practice partners.",
-  },
-  {
-    id: 4,
-    memberId: 4,
-    name: "Emily Wong",
-    sport: "Tennis",
-    skillLevel: "Intermediate",
-    availability: "Weekends",
-    preferredTime: "Evenings",
-    bio: "Enjoys evening tennis sessions and beginner-friendly games.",
-  },
-];
-
 export default function FindPartners() {
+  const [partners, setPartners] = useState<PartnerItem[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedSport, setSelectedSport] = useState("All");
   const [selectedSkill, setSelectedSkill] = useState("All");
   const [sendingMemberId, setSendingMemberId] = useState<number | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const loadPartners = async () => {
+    try {
+      setLoading(true);
+      const response = await partnerMatchingService.getPartners();
+      setPartners(response.data);
+    } catch (error) {
+      console.error(error);
+      alert("Failed to load partners. Please make sure you are logged in.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadPartners();
+  }, []);
+
+  const getPartnerName = (partner: PartnerItem) => {
+    const fullName = `${partner.first_name ?? ""} ${
+      partner.last_name ?? ""
+    }`.trim();
+
+    return fullName || partner.email || `Member #${partner.member_id}`;
+  };
+
+  const formatSkillLevel = (skill?: string | null) => {
+    if (!skill) return "Not specified";
+    return skill.charAt(0).toUpperCase() + skill.slice(1);
+  };
+
+  const getSport = (partner: PartnerItem) => {
+    return partner.sport || "Not specified";
+  };
+
+  const getAvailability = (partner: PartnerItem) => {
+    return partner.availability || "Not specified";
+  };
+
+  const getPreferredTime = (partner: PartnerItem) => {
+    return partner.preferred_time || "Not specified";
+  };
+
+  const getBio = (partner: PartnerItem) => {
+    return (
+      partner.bio ||
+      `Looking for partners for ${getSport(partner).toLowerCase()}.`
+    );
+  };
 
   const sports = useMemo(
-    () => ["All", ...new Set(mockPartners.map((partner) => partner.sport))],
-    []
+    () => [
+      "All",
+      ...new Set(
+        partners
+          .map((partner) => partner.sport)
+          .filter((sport): sport is string => Boolean(sport))
+      ),
+    ],
+    [partners]
   );
 
   const skillLevels = useMemo(
-    () => ["All", ...new Set(mockPartners.map((partner) => partner.skillLevel))],
-    []
+    () => [
+      "All",
+      ...new Set(partners.map((partner) => formatSkillLevel(partner.skill_level))),
+    ],
+    [partners]
   );
 
   const filteredPartners = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
 
-    return mockPartners.filter((partner) => {
+    return partners.filter((partner) => {
+      const name = getPartnerName(partner).toLowerCase();
+      const sport = getSport(partner).toLowerCase();
+      const skill = formatSkillLevel(partner.skill_level);
+      const bio = getBio(partner).toLowerCase();
+
       const matchesSport =
-        selectedSport === "All" || partner.sport === selectedSport;
-      const matchesSkill =
-        selectedSkill === "All" || partner.skillLevel === selectedSkill;
+        selectedSport === "All" || getSport(partner) === selectedSport;
+
+      const matchesSkill = selectedSkill === "All" || skill === selectedSkill;
+
       const matchesSearch =
         !query ||
-        partner.name.toLowerCase().includes(query) ||
-        partner.sport.toLowerCase().includes(query) ||
-        partner.bio.toLowerCase().includes(query);
+        name.includes(query) ||
+        sport.includes(query) ||
+        skill.toLowerCase().includes(query) ||
+        bio.includes(query);
 
       return matchesSport && matchesSkill && matchesSearch;
     });
-  }, [searchQuery, selectedSport, selectedSkill]);
+  }, [partners, searchQuery, selectedSport, selectedSkill]);
 
   const handleSendMatchRequest = async (partner: PartnerItem) => {
     try {
-      setSendingMemberId(partner.memberId);
+      setSendingMemberId(partner.member_id);
 
-      await partnerMatchingService.createMatchRequest(partner.memberId);
+      await partnerMatchingService.createMatchRequest(partner.member_id);
 
-      alert(`Match request sent to ${partner.name}`);
+      alert(`Match request sent to ${getPartnerName(partner)}`);
     } catch (error) {
       console.error(error);
       alert("Failed to send match request. Please make sure you are logged in.");
@@ -148,59 +165,72 @@ export default function FindPartners() {
         </div>
       </div>
 
-      <div className="partner-matching-list">
-        {filteredPartners.map((partner) => (
-          <div key={partner.id} className="partner-card">
-            <h3>{partner.name}</h3>
-            <p>{partner.bio}</p>
+      {loading ? (
+        <p className="partner-empty-state">Loading partners...</p>
+      ) : (
+        <>
+          <div className="partner-matching-list">
+            {filteredPartners.map((partner) => (
+              <div key={partner.member_id} className="partner-card">
+                <h3>{getPartnerName(partner)}</h3>
+                <p>{getBio(partner)}</p>
 
-            <div className="partner-card-tags">
-              <span className="partner-card-tag">{partner.sport}</span>
-              <span className="partner-card-tag">{partner.skillLevel}</span>
-              <span className="partner-card-tag">{partner.availability}</span>
-              <span className="partner-card-tag">{partner.preferredTime}</span>
-            </div>
+                <div className="partner-card-tags">
+                  <span className="partner-card-tag">{getSport(partner)}</span>
+                  <span className="partner-card-tag">
+                    {formatSkillLevel(partner.skill_level)}
+                  </span>
+                  <span className="partner-card-tag">
+                    {getAvailability(partner)}
+                  </span>
+                  <span className="partner-card-tag">
+                    {getPreferredTime(partner)}
+                  </span>
+                </div>
 
-            <p>
-              <strong>Sport:</strong> {partner.sport}
-            </p>
-            <p>
-              <strong>Skill Level:</strong> {partner.skillLevel}
-            </p>
-            <p>
-              <strong>Availability:</strong> {partner.availability}
-            </p>
-            <p>
-              <strong>Preferred Time:</strong> {partner.preferredTime}
-            </p>
+                <p>
+                  <strong>Sport:</strong> {getSport(partner)}
+                </p>
+                <p>
+                  <strong>Skill Level:</strong>{" "}
+                  {formatSkillLevel(partner.skill_level)}
+                </p>
+                <p>
+                  <strong>Availability:</strong> {getAvailability(partner)}
+                </p>
+                <p>
+                  <strong>Preferred Time:</strong> {getPreferredTime(partner)}
+                </p>
 
-            <div className="partner-card-actions">
-              <button
-                className="partner-primary-btn"
-                onClick={() => void handleSendMatchRequest(partner)}
-                disabled={sendingMemberId === partner.memberId}
-              >
-                {sendingMemberId === partner.memberId
-                  ? "Sending..."
-                  : "Send Match Request"}
-              </button>
+                <div className="partner-card-actions">
+                  <button
+                    className="partner-primary-btn"
+                    onClick={() => void handleSendMatchRequest(partner)}
+                    disabled={sendingMemberId === partner.member_id}
+                  >
+                    {sendingMemberId === partner.member_id
+                      ? "Sending..."
+                      : "Send Match Request"}
+                  </button>
 
-              <Link
-                to={`/find-partners/${partner.id}`}
-                className="partner-secondary-btn"
-              >
-                View Profile
-              </Link>
-            </div>
+                  <Link
+                    to={`/find-partners/${partner.member_id}`}
+                    className="partner-secondary-btn"
+                  >
+                    View Profile
+                  </Link>
+                </div>
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
 
-      {filteredPartners.length === 0 ? (
-        <p className="partner-empty-state">
-          No partners matched your search or filters.
-        </p>
-      ) : null}
+          {filteredPartners.length === 0 ? (
+            <p className="partner-empty-state">
+              No partners matched your search or filters.
+            </p>
+          ) : null}
+        </>
+      )}
     </main>
   );
 }
