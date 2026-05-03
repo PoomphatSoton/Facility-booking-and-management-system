@@ -1,71 +1,85 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router";
+import {
+  partnerMatchingService,
+  type PartnerItem,
+} from "~/services/partner-matching.service";
 import "./partner-matching.css";
 
-type PartnerProfileItem = {
-  id: number;
-  name: string;
-  sport: string;
-  skillLevel: string;
-  availability: string;
-  preferredTime: string;
-  bio: string;
+const formatName = (partner: PartnerItem) => {
+  const fullName = `${partner.first_name ?? ""} ${partner.last_name ?? ""}`.trim();
+  return fullName || partner.email || "Unknown member";
 };
 
-const mockPartners: PartnerProfileItem[] = [
-  {
-    id: 1,
-    name: "Alex Chen",
-    sport: "Badminton",
-    skillLevel: "Intermediate",
-    availability: "Weekdays",
-    preferredTime: "Evenings",
-    bio: "Looking for casual badminton games after class.",
-  },
-  {
-    id: 2,
-    name: "Sarah Khan",
-    sport: "Football",
-    skillLevel: "Beginner",
-    availability: "Weekends",
-    preferredTime: "Afternoons",
-    bio: "Interested in friendly football matches on weekends.",
-  },
-  {
-    id: 3,
-    name: "James Lee",
-    sport: "Squash",
-    skillLevel: "Advanced",
-    availability: "Weekdays",
-    preferredTime: "Mornings",
-    bio: "Competitive squash player seeking regular practice partners.",
-  },
-  {
-    id: 4,
-    name: "Emily Wong",
-    sport: "Tennis",
-    skillLevel: "Intermediate",
-    availability: "Weekends",
-    preferredTime: "Evenings",
-    bio: "Enjoys evening tennis sessions and beginner-friendly games.",
-  },
-];
+const formatValue = (value?: string | null) => {
+  if (!value) return "Not specified";
+  return value
+    .split(" ")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+};
 
 export default function PartnerProfile() {
   const params = useParams();
   const partnerId = Number(params.partnerId);
 
+  const [partners, setPartners] = useState<PartnerItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
   const partner = useMemo(
-    () => mockPartners.find((item) => item.id === partnerId),
-    [partnerId]
+    () => partners.find((item) => item.member_id === partnerId),
+    [partners, partnerId]
   );
 
-  if (!partner) {
+  useEffect(() => {
+    const loadPartner = async () => {
+      try {
+        setLoading(true);
+        setError("");
+
+        const response = await partnerMatchingService.getPartners();
+        setPartners(response.data ?? []);
+      } catch (err) {
+        console.error("Failed to load partner profile:", err);
+        setError("Failed to load partner profile. Please try again.");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadPartner();
+  }, []);
+
+  const handleSendRequest = async () => {
+    if (!partner) return;
+
+    try {
+      await partnerMatchingService.createMatchRequest(partner.member_id);
+      alert(`Match request sent to ${formatName(partner)}.`);
+    } catch (err) {
+      console.error("Failed to send match request:", err);
+      alert("Failed to send match request. Please try again.");
+    }
+  };
+
+  if (loading) {
     return (
       <main className="partner-matching-page">
         <div className="partner-matching-page-header">
           <h1>Partner Profile</h1>
-          <p>Partner not found.</p>
+          <p>Loading partner profile...</p>
+        </div>
+      </main>
+    );
+  }
+
+  if (error || !partner) {
+    return (
+      <main className="partner-matching-page">
+        <div className="partner-matching-page-header">
+          <h1>Partner Profile</h1>
+          <p>{error || "Partner not found."}</p>
         </div>
 
         <section className="partner-request-section">
@@ -77,10 +91,17 @@ export default function PartnerProfile() {
     );
   }
 
+  const name = formatName(partner);
+  const sport = formatValue(partner.sport);
+  const skillLevel = formatValue(partner.skill_level);
+  const availability = formatValue(partner.availability);
+  const preferredTime = formatValue(partner.preferred_time);
+  const bio = partner.bio || "No bio provided.";
+
   return (
     <main className="partner-matching-page">
       <div className="partner-matching-page-header">
-        <h1>{partner.name}</h1>
+        <h1>{name}</h1>
         <p>View detailed partner information before sending a match request</p>
       </div>
 
@@ -89,36 +110,33 @@ export default function PartnerProfile() {
 
         <div className="partner-request-card">
           <p>
-            <strong>Name:</strong> {partner.name}
+            <strong>Name:</strong> {name}
           </p>
           <p>
-            <strong>Sport:</strong> {partner.sport}
+            <strong>Sport:</strong> {sport}
           </p>
           <p>
-            <strong>Skill Level:</strong> {partner.skillLevel}
+            <strong>Skill Level:</strong> {skillLevel}
           </p>
           <p>
-            <strong>Availability:</strong> {partner.availability}
+            <strong>Availability:</strong> {availability}
           </p>
           <p>
-            <strong>Preferred Time:</strong> {partner.preferredTime}
+            <strong>Preferred Time:</strong> {preferredTime}
           </p>
           <p>
-            <strong>Bio:</strong> {partner.bio}
+            <strong>Bio:</strong> {bio}
           </p>
 
           <div className="partner-card-tags">
-            <span className="partner-card-tag">{partner.sport}</span>
-            <span className="partner-card-tag">{partner.skillLevel}</span>
-            <span className="partner-card-tag">{partner.availability}</span>
-            <span className="partner-card-tag">{partner.preferredTime}</span>
+            <span className="partner-card-tag">{sport}</span>
+            <span className="partner-card-tag">{skillLevel}</span>
+            <span className="partner-card-tag">{availability}</span>
+            <span className="partner-card-tag">{preferredTime}</span>
           </div>
 
           <div className="partner-card-actions" style={{ marginTop: "1rem" }}>
-            <button
-              className="partner-primary-btn"
-              onClick={() => alert(`Mock match request sent to ${partner.name}`)}
-            >
+            <button className="partner-primary-btn" onClick={handleSendRequest}>
               Send Match Request
             </button>
 

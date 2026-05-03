@@ -29,14 +29,29 @@ const getPartners = async ({ userId }) => {
         u.first_name,
         u.last_name,
         u.email,
-        'Not specified' AS sport,
-        'Not specified' AS skill_level,
+        COALESCE(ms.sport, msp.sport_preferred, 'Not specified') AS sport,
+        COALESCE(ms.skill_level, 'Not specified') AS skill_level,
         'Not specified' AS availability,
         'Not specified' AS preferred_time,
         '' AS bio
       FROM public.members m
       JOIN public.users u ON m.user_id = u.id
+      LEFT JOIN LATERAL (
+        SELECT sport, skill_level
+        FROM public.member_skills
+        WHERE member_id = m.member_id
+        ORDER BY member_skill_id
+        LIMIT 1
+      ) ms ON true
+      LEFT JOIN LATERAL (
+        SELECT sport_preferred
+        FROM public.member_sport_preferences
+        WHERE member_id = m.member_id
+        ORDER BY member_sport_preference_id
+        LIMIT 1
+      ) msp ON true
       WHERE m.member_id <> $1
+        AND u.role = 'member'
       ORDER BY u.first_name, u.last_name
     `,
     [currentMemberId]
