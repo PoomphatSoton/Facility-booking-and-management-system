@@ -20,6 +20,7 @@ export type FacilityItem = {
     slotToday: Slot[];
     slotByDate: Array<{ date: string; slots: Slot[] }>;
     maxPeople: number;
+    maxDurationMinutes: number | null;
     usageGuidelines: string[];
     imageUrl: string;
     openTime: Date;
@@ -75,6 +76,7 @@ const mapCard = (card: FacilityCardItem): FacilityItem => {
         slotToday: card.slotToday.map(parseSlot),
         slotByDate: [{ date: card.slotDate, slots: card.slotToday.map(parseSlot) }],
         maxPeople: card.maxPeople,
+        maxDurationMinutes: card.maxDurationMinutes ?? null,
         usageGuidelines,
         imageUrl: card.imageUrl ?? "",
         openTime: card.availableTime ? timeStrToDate(card.availableTime.startTime) : new Date(0),
@@ -240,6 +242,7 @@ export default function FacilityList() {
                                 slotToday={facility.slotToday}
                                 slotByDate={facility.slotByDate}
                                 maxPeople={facility.maxPeople}
+                                maxDurationMinutes={facility.maxDurationMinutes}
                                 usageGuidelines={facility.usageGuidelines}
                                 imageUrl={facility.imageUrl}
                             />
@@ -254,6 +257,7 @@ export default function FacilityList() {
                             slotToday={facility.slotToday}
                             slotByDate={facility.slotByDate}
                             maxPeople={facility.maxPeople}
+                            maxDurationMinutes={facility.maxDurationMinutes}
                             usageGuidelines={facility.usageGuidelines}
                             imageUrl={facility.imageUrl}
                         />

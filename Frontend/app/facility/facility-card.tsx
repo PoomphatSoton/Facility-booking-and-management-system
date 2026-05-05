@@ -3,6 +3,7 @@ import { useNavigate } from "react-router";
 import { Button, Modal } from "react-bootstrap";
 import Card from "react-bootstrap/Card";
 import type { Opening, Slot } from "./facility-list";
+import maximumIcon from "~/image/maimum.png";
 import "./facility.css";
 
 type FacilityCardProps = {
@@ -13,6 +14,7 @@ type FacilityCardProps = {
     slotToday: Slot[];
     slotByDate: Array<{ date: string; slots: Slot[] }>;
     maxPeople: number;
+    maxDurationMinutes: number | null;
     usageGuidelines: string[];
     imageUrl: string;
 };
@@ -42,6 +44,7 @@ export default function FacilityCard({
     slotToday,
     slotByDate,
     maxPeople,
+    maxDurationMinutes,
     usageGuidelines,
     imageUrl,
 }: FacilityCardProps) {
@@ -54,7 +57,6 @@ export default function FacilityCard({
 
     const todayOpening = getTodayOpening(openings);
     const visibleSlots = slotToday.slice(0, 3);
-    const hiddenSlotsCount = Math.max(slotToday.length - visibleSlots.length, 0);
     const descriptionPreview = truncateText(description, 95);
     const guidelinePreviewText = truncateText(usageGuidelines.join(" • "), 90);
     const selectedDateSlots = slotByDate.find((s) => s.date === selectedSlotDate)?.slots ?? [];
@@ -104,35 +106,6 @@ export default function FacilityCard({
                             View other days
                         </button>
 
-                        <div className="facility-meta-row mt-2">
-                            <span className="facility-meta-icon">T</span>
-                            <span>Slot today</span>
-                        </div>
-                        {slotToday.length === 0 ? (
-                            <div className="facility-meta-value" style={{ color: "#6c757d" }}>No slot today</div>
-                        ) : (
-                            <>
-                                <div className="facility-slot-list">
-                                    {visibleSlots.map((slot) => (
-                                        <span className="facility-slot-chip" key={fmtSlot(slot)}>
-                                            {fmtSlot(slot)}
-                                        </span>
-                                    ))}
-                                    {hiddenSlotsCount > 0 ? (
-                                        <span className="facility-slot-chip">...</span>
-                                    ) : null}
-                                </div>
-                                {hiddenSlotsCount > 0 ? (
-                                    <button
-                                        type="button"
-                                        className="facility-opening-more-btn"
-                                        onClick={() => setIsSlotModalOpen(true)}
-                                    >
-                                        View more slots
-                                    </button>
-                                ) : null}
-                            </>
-                        )}
                     </div>
 
                     <div className="facility-card-meta">
@@ -142,6 +115,20 @@ export default function FacilityCard({
                         </div>
                         <div className="facility-meta-value">{maxPeople} people</div>
                     </div>
+
+                    {maxDurationMinutes && (
+                        <div className="facility-card-meta">
+                            <div className="facility-meta-row">
+                                <img src={maximumIcon} alt="max duration" style={{ width: 20}} />
+                                <span>Max Duration</span>
+                            </div>
+                            <div className="facility-meta-value">
+                                {maxDurationMinutes >= 60 && maxDurationMinutes % 60 === 0
+                                    ? `${maxDurationMinutes / 60} hr${maxDurationMinutes / 60 > 1 ? "s" : ""}`
+                                    : `${maxDurationMinutes} min`}
+                            </div>
+                        </div>
+                    )}
 
                     <div className="facility-card-meta">
                         <div className="facility-meta-row">

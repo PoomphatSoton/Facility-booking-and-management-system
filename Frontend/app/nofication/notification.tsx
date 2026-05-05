@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { Dropdown } from "react-bootstrap";
 import type { NotificationItem } from "~/services/types";
@@ -10,20 +10,15 @@ export default function NotificationBell() {
     const navigate = useNavigate();
     const [notifications, setNotifications] = useState<NotificationItem[]>([]);
 
+    useEffect(() => {
+        notificationService.getNotifications()
+            .then(setNotifications)
+            .catch(() => {});
+    }, []);
+
     const unread = notifications.filter((n) => !n.isRead);
     const read = notifications.filter((n) => n.isRead);
     const unreadCount = unread.length;
-
-    const handleOpen = async (isOpen: boolean) => {
-        if (!isOpen) return;
-
-        try {
-            const data = await notificationService.getNotifications();
-            setNotifications(data);
-        } catch (error) {
-            console.error("Failed to get notifications:", error);
-        }
-    };
 
     const handleMarkRead = async (notifId: number) => {
         try {
@@ -46,7 +41,7 @@ export default function NotificationBell() {
     };
 
     return (
-        <Dropdown onToggle={handleOpen}>
+        <Dropdown>
             <Dropdown.Toggle as="div" className="notification-toggle" bsPrefix="notification-toggle">
                 <div className="notification-bell-wrapper">
                     <img src={notificationIcon} alt="Notifications" className="notification-bell-icon" />

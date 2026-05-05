@@ -187,7 +187,6 @@ const rejectRequest = async (req, res) => {
 };
 
 const getMyBookings = async (req, res) => {
-    console.log('getMyBookings called for user:', req.user.id);
     try {
         const userId = req.user.id;
         const result = await bookingService.getMyBookings(userId);

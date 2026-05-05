@@ -7,6 +7,7 @@ export default [
     route("find-partners", "partner-matching/find-partners.tsx"),
     route("partner-requests", "partner-matching/partner-requests.tsx"),
     route("find-partners/:partnerId", "partner-matching/partner-profile.tsx"),
+    route("booking/new/:facilityId", "booking/new-booking.tsx"),
     route("booking/my", "booking/my-bookings.tsx"),
   ]),
 
@@ -23,6 +24,7 @@ export default [
 
   layout("routes/admin-layout.tsx", [
     route("admin", "admin/admin-page.tsx"),
+    route("admin/accounts", "admin/admin-accounts.tsx"),
     route("admin/facility/create", "admin/create-facility.tsx", {
       id: "admin-facility-create",
     }),

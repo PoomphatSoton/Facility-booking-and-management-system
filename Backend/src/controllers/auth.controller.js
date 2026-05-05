@@ -43,7 +43,6 @@ const me = async (req, res) => {
 };
 
 const sessionStatus = async (req, res) => {
-  console.log("Session status check for user:", req.user);
   const user = req.user;
   const isPendingStep3 =
     !user.firstName || !user.lastName || !user.dateOfBirth || !user.address;

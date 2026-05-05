@@ -77,6 +77,7 @@ export interface FacilityCardItem {
   usageGuideline: string | null;
   imageUrl: string | null;
   maxPeople: number;
+  maxDurationMinutes: number | null;
   slotDate: string;
   slotToday: string[];
   availableTime: FacilityAvailableTime | null;

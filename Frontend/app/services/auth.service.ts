@@ -49,12 +49,11 @@ export const authService = {
       password,
     );
 
-    if (!credential.user.emailVerified) {
+    const { data } = await api.get<{ user: User }>("/auth/me");
+    if (data.user.role === "member" && !credential.user.emailVerified) {
       await signOut(firebaseAuth);
       throw new Error("Please verify your email before logging in.");
     }
-    const token = await credential.user.getIdToken(true);
-    const { data } = await api.get<{ user: User }>("/auth/me");
     return data;
   },
 

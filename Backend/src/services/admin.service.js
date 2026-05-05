@@ -36,7 +36,6 @@ const createAdmin = async ({ email, password, firstName, lastName }) => {
   );
   if (existing.rows.length > 0) throw buildError("email already exists", 409);
 
-  // Create Firebase account
   const firebaseUser = await auth.createUser({ email, password });
 
   const { rows } = await pool.query(
@@ -53,7 +52,16 @@ const createAdmin = async ({ email, password, firstName, lastName }) => {
   return mapAdmin(rows[0]);
 };
 
-const updateAdmin = async (adminId, { firstName, lastName, email }) => {
+const updateAdmin = async (adminId, { firstName, lastName, email, password }) => {
+  if (password) {
+    const { rows: userRows } = await pool.query(
+      `SELECT firebase_uid FROM public.users WHERE id = $1`, [adminId]
+    );
+    if (userRows[0]?.firebase_uid) {
+      await auth.updateUser(userRows[0].firebase_uid, { password });
+    }
+  }
+
   const { rows } = await pool.query(
     `UPDATE public.users
      SET first_name = $1, last_name = $2, email = COALESCE($3, email)
@@ -92,37 +100,29 @@ const deleteAdmin = async (adminId) => {
   }
 };
 
+const KNOWN_ROOT_ADMIN_UID = "e2ya46Ab1pYAByIvHAc6yrcCpYs2";
+
 const seedRootAdmin = async () => {
   const email = ROOT_ADMIN_EMAIL;
-  const password = "123456";
+  const uid = KNOWN_ROOT_ADMIN_UID;
 
   const { rows } = await pool.query(
     `SELECT id FROM public.users WHERE email = $1`,
-    [email],
+    [email]
   );
 
   if (rows.length > 0) {
-    return;
+    await pool.query(
+      `UPDATE public.users SET firebase_uid = $1 WHERE id = $2`,
+      [uid, rows[0].id]
+    );
+  } else {
+    await pool.query(
+      `INSERT INTO public.users (email, firebase_uid, first_name, last_name, role, account_status)
+       VALUES ($1, $2, 'Root', 'Admin', 'admin', 'active')`,
+      [email, uid]
+    );
   }
-
-  let firebaseUid = null;
-  try {
-    const firebaseUser = await auth.createUser({ email, password });
-    firebaseUid = firebaseUser.uid;
-  } catch (err) {
-    if (err.code === "auth/email-already-exists") {
-      const existing = await auth.getUserByEmail(email);
-      firebaseUid = existing.uid;
-    } else {
-      throw err;
-    }
-  }
-
-  await pool.query(
-    `INSERT INTO public.users (email, firebase_uid, first_name, last_name, role, account_status)
-     VALUES ($1, $2, 'Root', 'Admin', 'admin', 'active')`,
-    [email, firebaseUid],
-  );
 };
 
 module.exports = {

@@ -1297,7 +1297,19 @@ const respondToAlternative = async (bookingRequestId, userId, accept) => {
     };
 };
 
+const hasFacilityBookings = async (facilityId) => {
+    const { rows } = await pool.query(
+        `SELECT 1 FROM public.booking_details bd
+         JOIN public.bookings b ON b.booking_detail_id = bd.booking_detail_id
+         WHERE bd.facility_id = $1 AND b.booking_status = 'upcoming'
+         LIMIT 1`,
+        [facilityId]
+    );
+    return rows.length > 0;
+};
+
 module.exports = {
+    hasFacilityBookings,
     getAvailableSlots,
     submitBookingRequest,
     getPendingRequestsForStaff,

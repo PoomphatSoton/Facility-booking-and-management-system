@@ -1,5 +1,6 @@
 import { Navigate } from "react-router";
 import { useAuth } from "./auth-middleware";
+import { firebaseAuth } from "~/config/firebase";
 import type { UserRole } from "~/services/types";
 
 type RoleGuardProps = {
@@ -11,7 +12,10 @@ export function Guard({ allow, children }: RoleGuardProps) {
 
   if (loading) return <p>Loading...</p>;
 
-  if (!user) return <Navigate to="/" replace />;
+  if (!user) {
+    if (firebaseAuth.currentUser) return <p>Loading...</p>;
+    return <Navigate to="/auth/login" replace />;
+  }
 
   if (user.role === "admin" && !allow.includes("admin")) {
     return <Navigate to="/admin" replace />;

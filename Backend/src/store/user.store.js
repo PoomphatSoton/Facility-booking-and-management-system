@@ -72,7 +72,6 @@ const findByEmail = async (email) => {
 
 const findByFirebaseUid = async (firebaseUid) => {
   if (!firebaseUid) return null;
-
   const { rows } = await pool.query(
     `SELECT ${USER_SELECT} FROM public.users WHERE firebase_uid = $1 LIMIT 1`,
     [firebaseUid],

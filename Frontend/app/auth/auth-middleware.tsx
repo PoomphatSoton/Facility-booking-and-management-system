@@ -17,7 +17,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const unsubscribe = onAuthStateChanged(
       firebaseAuth,
       async (firebaseUser: FirebaseUser | null) => {
-        if (!firebaseUser || !firebaseUser.emailVerified) {
+        if (!firebaseUser) {
           setUser(null);
           setLoading(false);
           return;
@@ -27,6 +27,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           await firebaseUser.getIdToken(true);
 
           const { data } = await api.get<{ user: User }>("/auth/me");
+
+          if (data.user.role === "member" && !firebaseUser.emailVerified) {
+            setUser(null);
+            return;
+          }
+
           setUser(data.user);
         } catch {
           setUser(null);

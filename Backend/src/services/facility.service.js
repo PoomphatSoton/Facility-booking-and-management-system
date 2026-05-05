@@ -1,4 +1,5 @@
 const { pool } = require("../config/db");
+const { hasFacilityBookings } = require("./booking.service");
 
 const DAY_NAMES = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
 
@@ -76,7 +77,8 @@ const getFacilityCards = async () => {
         description,
         usage_guideline,
         image_url,
-        max_people
+        max_people,
+        max_duration_minutes
       FROM public.facilities
       ORDER BY facility_id ASC
     `,
@@ -105,6 +107,7 @@ const getFacilityCards = async () => {
       usageGuideline: facility.usage_guideline,
       imageUrl: facility.image_url ?? null,
       maxPeople: facility.max_people,
+      maxDurationMinutes: facility.max_duration_minutes ?? null,
       slotDate,
       slotToday: slotTimesByFacility.get(facility.facility_id) || [],
       availableTime,
@@ -125,6 +128,7 @@ const updateFacility = async (facilityId, data) => {
       usageGuideline,
       imageUrl,
       maxPeople,
+      maxDurationMinutes,
       schedules = [],
       slotTimes = [],
     } = data;
@@ -136,8 +140,9 @@ const updateFacility = async (facilityId, data) => {
         description = $2,
         usage_guideline = $3,
         max_people = $4,
-        image_url = $5
-      WHERE facility_id = $6
+        image_url = $5,
+        max_duration_minutes = $6
+      WHERE facility_id = $7
       RETURNING *
       `,
       [
@@ -146,6 +151,7 @@ const updateFacility = async (facilityId, data) => {
         usageGuideline ?? null,
         maxPeople,
         imageUrl ?? null,
+        maxDurationMinutes ?? null,
         facilityId,
       ],
     );
@@ -208,6 +214,13 @@ const updateFacility = async (facilityId, data) => {
 };
 
 const deleteFacility = async (facilityId) => {
+  const hasBookings = await hasFacilityBookings(facilityId);
+  if (hasBookings) {
+    const error = new Error("Cannot delete facility with active bookings");
+    error.statusCode = 409;
+    throw error;
+  }
+
   const client = await pool.connect();
 
   try {
@@ -249,6 +262,7 @@ const createFacility = async (data) => {
       usageGuideline,
       imageUrl,
       maxPeople,
+      maxDurationMinutes,
       schedules = [],
       slotTimes = [],
     } = data;
@@ -256,8 +270,8 @@ const createFacility = async (data) => {
     const facilityResult = await client.query(
       `
       INSERT INTO public.facilities
-        (name, description, usage_guideline, image_url, max_people)
-      VALUES ($1, $2, $3, $4, $5)
+        (name, description, usage_guideline, image_url, max_people, max_duration_minutes)
+      VALUES ($1, $2, $3, $4, $5, $6)
       RETURNING *
       `,
       [
@@ -266,6 +280,7 @@ const createFacility = async (data) => {
         usageGuideline ?? null,
         imageUrl ?? null,
         maxPeople,
+        maxDurationMinutes ?? null,
       ],
     );
 
@@ -315,10 +330,28 @@ const createFacility = async (data) => {
   }
 };
 
+const getFacilitySlotTimes = async (facilityId) => {
+  const { rows } = await pool.query(
+    `SELECT slot_time_id, slot_date, slot_start_time, slot_end_time, is_booking
+     FROM public.facility_slot_times
+     WHERE facility_id = $1
+     ORDER BY slot_date ASC, slot_start_time ASC`,
+    [facilityId]
+  );
+  return rows.map((r) => ({
+    slotTimeId: r.slot_time_id,
+    slotDate: r.slot_date,
+    startTime: r.slot_start_time.slice(0, 5),
+    endTime: r.slot_end_time.slice(0, 5),
+    isBooking: r.is_booking,
+  }));
+};
+
 module.exports = {
   getSlotTime,
   getAvailableTime,
   getFacilityCards,
+  getFacilitySlotTimes,
   updateFacility,
   deleteFacility,
   createFacility,
