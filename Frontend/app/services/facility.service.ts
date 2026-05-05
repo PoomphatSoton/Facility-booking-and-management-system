@@ -28,12 +28,6 @@ export type FacilityPayload = {
     startTime: string;
     endTime: string;
   }>;
-  slotTimes: Array<{
-    slotDate: string;
-    startTime: string;
-    endTime: string;
-    isBooking?: boolean;
-  }>;
 };
 
 export type CreateFacilityResponse = {
@@ -72,13 +66,6 @@ export const facilityService = {
   createFacility: async (payload: FacilityPayload) => {
     const { data } = await api.post<CreateFacilityResponse>("/facilities", payload);
     return data;
-  },
-
-  getSlotTimes: async (facilityId: number) => {
-    const { data } = await api.get<{ status: string; data: Array<{ slotTimeId: number; slotDate: string; startTime: string; endTime: string; isBooking: boolean }> }>(
-      `/facilities/${facilityId}/slot-times`
-    );
-    return data.data;
   },
 
   uploadImage: async (file: File): Promise<string> => {

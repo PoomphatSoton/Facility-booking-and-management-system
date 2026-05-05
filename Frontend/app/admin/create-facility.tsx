@@ -82,6 +82,13 @@ export default function CreateFacility() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    const days = form.openings.map((o) => o.day);
+    const hasDuplicate = days.length !== new Set(days).size;
+    if (hasDuplicate) {
+      alert("Each day can only appear once in opening hours.");
+      return;
+    }
+
     let imageUrl: string | null = editData?.imageUrl ?? null;
     if (imageFile) {
       try {
@@ -109,7 +116,6 @@ export default function CreateFacility() {
         startTime: fmtTime(o.startTime),
         endTime: fmtTime(o.endTime),
       })),
-      slotTimes: [],
     };
 
     try {
@@ -163,38 +169,40 @@ export default function CreateFacility() {
         <section className="create-facility-section">
           <h2>Details</h2>
 
-          <div className="create-facility-field">
-            <label htmlFor="cf-max-people">Max People</label>
-            <Form.Control
-              id="cf-max-people"
-              type="number"
-              min={1}
-              value={form.maxPeople}
-              onChange={(e) => setForm({ ...form, maxPeople: Number(e.target.value) })}
-              required
-            />
-          </div>
-
-          <div className="create-facility-field">
-            <label htmlFor="cf-duration">Max Duration Per Person</label>
-            <InputGroup>
+          <div className="create-facility-fields-row">
+            <div className="create-facility-field">
+              <label htmlFor="cf-max-people">Max People</label>
               <Form.Control
-                id="cf-duration"
+                id="cf-max-people"
                 type="number"
                 min={1}
-                value={form.durationValue}
-                onChange={(e) => setForm({ ...form, durationValue: Number(e.target.value) })}
+                value={form.maxPeople}
+                onChange={(e) => setForm({ ...form, maxPeople: Number(e.target.value) })}
                 required
               />
-              <Form.Select
-                style={{ maxWidth: 120 }}
-                value={form.durationUnit}
-                onChange={(e) => setForm({ ...form, durationUnit: e.target.value as DurationUnit })}
-              >
-                <option value={Duration.minutes}>Minutes</option>
-                <option value={Duration.hours}>Hours</option>
-              </Form.Select>
-            </InputGroup>
+            </div>
+
+            <div className="create-facility-field">
+              <label htmlFor="cf-duration">Max Duration Per Person</label>
+              <InputGroup>
+                <Form.Control
+                  id="cf-duration"
+                  type="number"
+                  min={1}
+                  value={form.durationValue}
+                  onChange={(e) => setForm({ ...form, durationValue: Number(e.target.value) })}
+                  required
+                />
+                <Form.Select
+                  className="create-facility-duration-unit"
+                  value={form.durationUnit}
+                  onChange={(e) => setForm({ ...form, durationUnit: e.target.value as DurationUnit })}
+                >
+                  <option value={Duration.minutes}>Minutes</option>
+                  <option value={Duration.hours}>Hours</option>
+                </Form.Select>
+              </InputGroup>
+            </div>
           </div>
 
           <div className="create-facility-field">

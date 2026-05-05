@@ -5,36 +5,6 @@ const DAY_NAMES = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
 
 const getDayOfWeekLabel = (date) => DAY_NAMES[date.getDay()];
 
-const getSlotTime = async ({ facilityIds, slotDate }) => {
-  if (!facilityIds.length) return new Map();
-
-  const result = await pool.query(
-    `
-      SELECT
-        facility_id,
-        TO_CHAR(slot_start_time, 'HH24:MI') AS slot_start_time,
-        TO_CHAR(slot_end_time, 'HH24:MI') AS slot_end_time
-      FROM public.facility_slot_times
-      WHERE facility_id = ANY($1::int[])
-        AND slot_date = $2::date
-        AND is_booking = FALSE
-      ORDER BY facility_id, slot_start_time
-    `,
-    [facilityIds, slotDate],
-  );
-
-  const slotMap = new Map();
-
-  for (const row of result.rows) {
-    const slotText = `${row.slot_start_time}-${row.slot_end_time}`;
-    const currentSlots = slotMap.get(row.facility_id) || [];
-    currentSlots.push(slotText);
-    slotMap.set(row.facility_id, currentSlots);
-  }
-
-  return slotMap;
-};
-
 const getAvailableTime = async ({ facilityIds }) => {
   if (!facilityIds.length) return new Map();
 
@@ -88,12 +58,8 @@ const getFacilityCards = async () => {
   const facilityIds = facilities.map((facility) => facility.facility_id);
 
   const today = new Date();
-  const slotDate = today.toISOString().slice(0, 10);
   const dayOfWeek = getDayOfWeekLabel(today);
-  const [slotTimesByFacility, allSchedulesByFacility] = await Promise.all([
-    getSlotTime({ facilityIds, slotDate }),
-    getAvailableTime({ facilityIds }),
-  ]);
+  const allSchedulesByFacility = await getAvailableTime({ facilityIds });
 
   return facilities.map((facility) => {
     const allSchedules = allSchedulesByFacility.get(facility.facility_id) || [];
@@ -108,8 +74,6 @@ const getFacilityCards = async () => {
       imageUrl: facility.image_url ?? null,
       maxPeople: facility.max_people,
       maxDurationMinutes: facility.max_duration_minutes ?? null,
-      slotDate,
-      slotToday: slotTimesByFacility.get(facility.facility_id) || [],
       availableTime,
       otherAvailableTimes,
     };
@@ -130,7 +94,6 @@ const updateFacility = async (facilityId, data) => {
       maxPeople,
       maxDurationMinutes,
       schedules = [],
-      slotTimes = [],
     } = data;
     const facilityResult = await client.query(
       `
@@ -176,29 +139,6 @@ const updateFacility = async (facilityId, data) => {
         VALUES ($1, $2, $3, $4)
         `,
         [facilityId, schedule.dayOfWeek, schedule.startTime, schedule.endTime],
-      );
-    }
-
-    // Delete non-booked slots and replace with new ones
-    await client.query(
-      `DELETE FROM public.facility_slot_times WHERE facility_id = $1 AND is_booking = FALSE`,
-      [facilityId],
-    );
-
-    for (const slot of slotTimes) {
-      await client.query(
-        `
-        INSERT INTO public.facility_slot_times
-          (facility_id, slot_date, slot_start_time, slot_end_time, is_booking)
-        VALUES ($1, $2, $3, $4, $5)
-        `,
-        [
-          facilityId,
-          slot.slotDate,
-          slot.startTime,
-          slot.endTime,
-          slot.isBooking ?? false,
-        ],
       );
     }
 
@@ -264,7 +204,6 @@ const createFacility = async (data) => {
       maxPeople,
       maxDurationMinutes,
       schedules = [],
-      slotTimes = [],
     } = data;
 
     const facilityResult = await client.query(
@@ -302,23 +241,6 @@ const createFacility = async (data) => {
       );
     }
 
-    for (const slot of slotTimes) {
-      await client.query(
-        `
-        INSERT INTO public.facility_slot_times
-          (facility_id, slot_date, slot_start_time, slot_end_time, is_booking)
-        VALUES ($1, $2, $3, $4, $5)
-        `,
-        [
-          facility.facility_id,
-          slot.slotDate,
-          slot.startTime,
-          slot.endTime,
-          slot.isBooking ?? false,
-        ],
-      );
-    }
-
     await client.query("COMMIT");
 
     return facility;
@@ -330,28 +252,9 @@ const createFacility = async (data) => {
   }
 };
 
-const getFacilitySlotTimes = async (facilityId) => {
-  const { rows } = await pool.query(
-    `SELECT slot_time_id, slot_date, slot_start_time, slot_end_time, is_booking
-     FROM public.facility_slot_times
-     WHERE facility_id = $1
-     ORDER BY slot_date ASC, slot_start_time ASC`,
-    [facilityId]
-  );
-  return rows.map((r) => ({
-    slotTimeId: r.slot_time_id,
-    slotDate: r.slot_date,
-    startTime: r.slot_start_time.slice(0, 5),
-    endTime: r.slot_end_time.slice(0, 5),
-    isBooking: r.is_booking,
-  }));
-};
-
 module.exports = {
-  getSlotTime,
   getAvailableTime,
   getFacilityCards,
-  getFacilitySlotTimes,
   updateFacility,
   deleteFacility,
   createFacility,

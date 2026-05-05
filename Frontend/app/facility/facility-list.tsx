@@ -10,15 +10,11 @@ import type { FacilityCardItem } from "~/services/types";
 
 export type Opening = { day: string; startTime: Date; endTime: Date };
 
-export type Slot = { start: Date; end: Date };
-
 export type FacilityItem = {
     facilityId: number;
     name: string;
     description: string;
     openings: Opening[];
-    slotToday: Slot[];
-    slotByDate: Array<{ date: string; slots: Slot[] }>;
     maxPeople: number;
     maxDurationMinutes: number | null;
     usageGuidelines: string[];
@@ -49,11 +45,6 @@ const timeStrToDate = (t: string): Date => {
     return d;
 };
 
-const parseSlot = (s: string): { start: Date; end: Date } => {
-    const [startStr, endStr] = s.split("-");
-    return { start: timeStrToDate(startStr), end: timeStrToDate(endStr) };
-};
-
 const mapCard = (card: FacilityCardItem): FacilityItem => {
     const capitalize = (s: string) => `${s.charAt(0).toUpperCase()}${s.slice(1)}`;
     const usageGuidelines = card.usageGuideline
@@ -73,8 +64,6 @@ const mapCard = (card: FacilityCardItem): FacilityItem => {
             startTime: timeStrToDate(t.startTime),
             endTime: timeStrToDate(t.endTime),
         })),
-        slotToday: card.slotToday.map(parseSlot),
-        slotByDate: [{ date: card.slotDate, slots: card.slotToday.map(parseSlot) }],
         maxPeople: card.maxPeople,
         maxDurationMinutes: card.maxDurationMinutes ?? null,
         usageGuidelines,
@@ -239,8 +228,6 @@ export default function FacilityList() {
                                 name={facility.name}
                                 description={facility.description}
                                 openings={facility.openings}
-                                slotToday={facility.slotToday}
-                                slotByDate={facility.slotByDate}
                                 maxPeople={facility.maxPeople}
                                 maxDurationMinutes={facility.maxDurationMinutes}
                                 usageGuidelines={facility.usageGuidelines}
@@ -254,8 +241,6 @@ export default function FacilityList() {
                             name={facility.name}
                             description={facility.description}
                             openings={facility.openings}
-                            slotToday={facility.slotToday}
-                            slotByDate={facility.slotByDate}
                             maxPeople={facility.maxPeople}
                             maxDurationMinutes={facility.maxDurationMinutes}
                             usageGuidelines={facility.usageGuidelines}

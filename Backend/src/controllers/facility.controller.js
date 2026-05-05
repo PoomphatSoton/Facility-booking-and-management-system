@@ -90,19 +90,8 @@ const createFacility = async (req, res) => {
   }
 };
 
-const getFacilitySlotTimes = async (req, res) => {
-  try {
-    const { facilityId } = req.params;
-    const slots = await facilityService.getFacilitySlotTimes(Number(facilityId));
-    return res.status(200).json({ status: 'ok', data: slots });
-  } catch (error) {
-    return res.status(500).json({ status: 'error', message: error.message });
-  }
-};
-
 module.exports = {
   getFacilityCards,
-  getFacilitySlotTimes,
   updateFacility,
   deleteFacility,
   createFacility
