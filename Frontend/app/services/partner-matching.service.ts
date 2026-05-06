@@ -28,6 +28,13 @@ export interface IncomingPartnerRequestItem {
   first_name?: string | null;
   last_name?: string | null;
   email?: string | null;
+  booking_request_id?: number | null;
+  booking_request_status?: string | null;
+  booking_date?: string | null;
+  booking_start_time?: string | null;
+  booking_end_time?: string | null;
+  booking_intended_activity?: string | null;
+  booking_facility_name?: string | null;
 }
 
 export interface IncomingPartnerRequestResponse {

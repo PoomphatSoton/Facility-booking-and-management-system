@@ -25,7 +25,7 @@ const getAvailableSlots = async (req, res) => {
 const submitBookingRequest = async (req, res) => {
     try {
         const userId = req.user.id;
-        const { facilityId, slotDate, startTime, endTime, intendedActivity } = req.body;
+        const { facilityId, slotDate, startTime, endTime, intendedActivity, partnerMemberId } = req.body;
 
         if (!facilityId || !slotDate || !startTime || !endTime) {
             return res.status(400).json({
@@ -41,6 +41,7 @@ const submitBookingRequest = async (req, res) => {
             startTime,
             endTime,
             intendedActivity,
+            partnerMemberId: partnerMemberId != null ? parseInt(partnerMemberId, 10) : null,
         });
 
         return res.status(201).json({ status: 'ok', data: result });
@@ -55,6 +56,8 @@ const submitBookingRequest = async (req, res) => {
             OUTSIDE_SCHEDULE: 'selected time is outside facility opening hours',
             EXCEEDS_MAX_DURATION: 'booking duration exceeds the maximum allowed',
             CAPACITY_EXCEEDED: 'this time slot is fully booked',
+            PARTNER_NOT_FOUND: 'selected partner does not exist',
+            CANNOT_MATCH_SELF: 'you cannot select yourself as a partner',
         };
 
         if (errorMessages[error.message]) {

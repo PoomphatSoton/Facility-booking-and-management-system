@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router";
 import { Alert, Badge, Button, Card, Col, Form, Row, Spinner } from "react-bootstrap";
 import { bookingService } from "~/services/booking.service";
+import { partnerMatchingService, type PartnerItem } from "~/services/partner-matching.service";
 import type { AvailableSlot, FacilitySlots } from "~/services/types";
 import "./new-booking.css";
 
@@ -30,6 +31,9 @@ export default function NewBooking() {
     const [activity, setActivity] = useState("");
 
     const [loadingSlots, setLoadingSlots] = useState(false);
+    const [partners, setPartners] = useState<PartnerItem[]>([]);
+    const [partnersLoading, setPartnersLoading] = useState(false);
+    const [selectedPartnerId, setSelectedPartnerId] = useState<number | null>(null);
     const [submitting, setSubmitting] = useState(false);
     const [errorMsg, setErrorMsg] = useState("");
     const [successMsg, setSuccessMsg] = useState("");
@@ -52,6 +56,21 @@ export default function NewBooking() {
             setLoadingSlots(false);
         }
     };
+
+    useEffect(() => {
+        const loadPartners = async () => {
+            try {
+                setPartnersLoading(true);
+                const response = await partnerMatchingService.getPartners();
+                setPartners(response.data ?? []);
+            } catch {
+                // Non-critical: partner list failure should not block booking
+            } finally {
+                setPartnersLoading(false);
+            }
+        };
+        void loadPartners();
+    }, []);
 
     useEffect(() => { void fetchSlots(selectedDate); }, [facilityId]);
 
@@ -101,6 +120,7 @@ export default function NewBooking() {
                 startTime,
                 endTime,
                 intendedActivity: activity.trim(),
+                ...(selectedPartnerId != null && { partnerMemberId: selectedPartnerId }),
             });
             if (response.status === "ok") {
                 setSuccessMsg("Booking request submitted! Waiting for staff approval.");
@@ -224,6 +244,44 @@ export default function NewBooking() {
                                 />
                             </Form.Group>
 
+                            <Form.Group className="mb-4">
+                                <Form.Label>
+                                    Select a Partner{" "}
+                                    <span className="text-muted fw-normal">(optional)</span>
+                                </Form.Label>
+                                <Form.Select
+                                    value={selectedPartnerId ?? ""}
+                                    onChange={(e) =>
+                                        setSelectedPartnerId(
+                                            e.target.value === "" ? null : parseInt(e.target.value, 10)
+                                        )
+                                    }
+                                    disabled={partnersLoading}
+                                >
+                                    <option value="">
+                                        {partnersLoading ? "Loading partners…" : "No partner — individual booking"}
+                                    </option>
+                                    {partners.map((p) => (
+                                        <option key={p.member_id} value={p.member_id}>
+                                            {[p.first_name, p.last_name].filter(Boolean).join(" ")}
+                                            {p.sport && p.sport !== "Not specified" ? ` — ${p.sport}` : ""}
+                                            {p.skill_level && p.skill_level !== "Not specified"
+                                                ? ` · ${p.skill_level}`
+                                                : ""}
+                                            {p.availability && p.availability !== "Not specified"
+                                                ? ` · ${p.availability}`
+                                                : ""}
+                                            {p.preferred_time && p.preferred_time !== "Not specified"
+                                                ? ` · ${p.preferred_time}`
+                                                : ""}
+                                        </option>
+                                    ))}
+                                </Form.Select>
+                                <Form.Text className="text-muted">
+                                    Selecting a partner sends them a match request linked to this booking.
+                                </Form.Text>
+                            </Form.Group>
+
                             <div className="d-flex align-items-center gap-3 mt-4">
                                 <Button
                                     variant="primary"
@@ -300,6 +358,26 @@ export default function NewBooking() {
                                     )}
                                 </div>
                             )}
+
+                            {selectedPartnerId != null && (() => {
+                                const p = partners.find((x) => x.member_id === selectedPartnerId);
+                                return p ? (
+                                    <div className="mb-3">
+                                        <div className="text-muted small">Partner</div>
+                                        <div className="fw-bold">
+                                            {[p.first_name, p.last_name].filter(Boolean).join(" ")}
+                                        </div>
+                                        {p.sport && p.sport !== "Not specified" && (
+                                            <div className="small text-muted">
+                                                {p.sport}
+                                                {p.skill_level && p.skill_level !== "Not specified"
+                                                    ? ` · ${p.skill_level}`
+                                                    : ""}
+                                            </div>
+                                        )}
+                                    </div>
+                                ) : null;
+                            })()}
 
                             {facilityData && (
                                 <>
