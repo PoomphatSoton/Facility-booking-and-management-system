@@ -401,6 +401,7 @@ import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router";
 import { Alert, Button, Card, Col, Form, Row, Spinner } from "react-bootstrap";
 import { bookingService } from "~/services/booking.service";
+import { partnerMatchingService, type PartnerItem } from "~/services/partner-matching.service";
 import type { FacilitySlots, OpeningHour } from "~/services/types";
 
 const DAY_KEYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const;
@@ -441,6 +442,10 @@ export default function NewBooking() {
         available: boolean;
     } | null>(null);
 
+    const [partners, setPartners] = useState<PartnerItem[]>([]);
+    const [partnersLoading, setPartnersLoading] = useState(false);
+    const [selectedPartnerId, setSelectedPartnerId] = useState<number | null>(null);
+
     const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
     const [errorMsg, setErrorMsg] = useState("");
@@ -472,6 +477,22 @@ export default function NewBooking() {
         };
         void load();
     }, [facilityId]);
+
+    // Load available partners for optional partner matching
+    useEffect(() => {
+        const loadPartners = async () => {
+            try {
+                setPartnersLoading(true);
+                const response = await partnerMatchingService.getPartners();
+                setPartners(response.data ?? []);
+            } catch {
+                // Non-critical: partner list failure should not block booking
+            } finally {
+                setPartnersLoading(false);
+            }
+        };
+        void loadPartners();
+    }, []);
 
     // Recompute availability whenever date/time changes
     useEffect(() => {
@@ -531,6 +552,7 @@ export default function NewBooking() {
                 startTime,
                 endTime,
                 intendedActivity: activity.trim(),
+                ...(selectedPartnerId != null && { partnerMemberId: selectedPartnerId }),
             });
 
             if (response.status === "ok") {
@@ -755,6 +777,44 @@ export default function NewBooking() {
                                 />
                             </Form.Group>
 
+                            <Form.Group className="mb-4">
+                                <Form.Label>
+                                    Select a Partner{" "}
+                                    <span className="text-muted fw-normal">(optional)</span>
+                                </Form.Label>
+                                <Form.Select
+                                    value={selectedPartnerId ?? ""}
+                                    onChange={(e) =>
+                                        setSelectedPartnerId(
+                                            e.target.value === "" ? null : parseInt(e.target.value, 10)
+                                        )
+                                    }
+                                    disabled={partnersLoading}
+                                >
+                                    <option value="">
+                                        {partnersLoading ? "Loading partners…" : "No partner — individual booking"}
+                                    </option>
+                                    {partners.map((p) => (
+                                        <option key={p.member_id} value={p.member_id}>
+                                            {[p.first_name, p.last_name].filter(Boolean).join(" ")}
+                                            {p.sport && p.sport !== "Not specified" ? ` — ${p.sport}` : ""}
+                                            {p.skill_level && p.skill_level !== "Not specified"
+                                                ? ` · ${p.skill_level}`
+                                                : ""}
+                                            {p.availability && p.availability !== "Not specified"
+                                                ? ` · ${p.availability}`
+                                                : ""}
+                                            {p.preferred_time && p.preferred_time !== "Not specified"
+                                                ? ` · ${p.preferred_time}`
+                                                : ""}
+                                        </option>
+                                    ))}
+                                </Form.Select>
+                                <Form.Text className="text-muted">
+                                    Selecting a partner sends them a match request linked to this booking.
+                                </Form.Text>
+                            </Form.Group>
+
                             <div className="d-flex align-items-center gap-3 mt-4">
                                 <Button
                                     variant="primary"
@@ -845,6 +905,26 @@ export default function NewBooking() {
                                     )}
                                 </div>
                             )}
+
+                            {selectedPartnerId != null && (() => {
+                                const p = partners.find((x) => x.member_id === selectedPartnerId);
+                                return p ? (
+                                    <div className="mb-3">
+                                        <div className="text-muted small">Partner</div>
+                                        <div className="fw-bold">
+                                            {[p.first_name, p.last_name].filter(Boolean).join(" ")}
+                                        </div>
+                                        {p.sport && p.sport !== "Not specified" && (
+                                            <div className="small text-muted">
+                                                {p.sport}
+                                                {p.skill_level && p.skill_level !== "Not specified"
+                                                    ? ` · ${p.skill_level}`
+                                                    : ""}
+                                            </div>
+                                        )}
+                                    </div>
+                                ) : null;
+                            })()}
 
                             {facilityData.maxPeople && (
                                 <Alert variant="info" className="py-2 mt-3 mb-0">

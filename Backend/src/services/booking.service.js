@@ -242,6 +242,7 @@ const submitBookingRequest = async ({
                                         startTime,
                                         endTime,
                                         intendedActivity,
+                                        partnerMemberId,
                                     }) => {
     // 1. Find the member_id corresponding to the current user
     const memberResult = await pool.query(
@@ -253,7 +254,22 @@ const submitBookingRequest = async ({
     }
     const memberId = memberResult.rows[0].member_id;
 
-    // 2. Check if the venue exists
+    // 2. Validate optional partner before touching the DB transactionally
+    if (partnerMemberId != null) {
+        const partnerIdInt = parseInt(partnerMemberId, 10);
+        if (partnerIdInt === memberId) {
+            throw new Error('CANNOT_MATCH_SELF');
+        }
+        const partnerResult = await pool.query(
+            `SELECT member_id FROM public.members WHERE member_id = $1`,
+            [partnerIdInt]
+        );
+        if (partnerResult.rows.length === 0) {
+            throw new Error('PARTNER_NOT_FOUND');
+        }
+    }
+
+    // 3. Check if the venue exists
     const facilityResult = await pool.query(
         `SELECT facility_id FROM public.facilities WHERE facility_id = $1`,
         [facilityId]
@@ -277,7 +293,7 @@ const submitBookingRequest = async ({
         throw windowError;
     }
 
-    // 4. Check whether this member already has a pending request for the same time slot (to prevent duplicate submissions)
+    // 4. Check whether this member already has a pending request for the same time slot
     const duplicateResult = await pool.query(
         `SELECT br.booking_request_id
      FROM public.booking_requests br
@@ -294,30 +310,57 @@ const submitBookingRequest = async ({
         throw new Error('DUPLICATE_REQUEST');
     }
 
-    // 5. Insert booking_details
-    const detailResult = await pool.query(
-        `INSERT INTO public.booking_details 
-       (facility_id, date, start_time, end_time, intended_activity, member_id)
-     VALUES ($1, $2, $3, $4, $5, $6)
-     RETURNING booking_detail_id`,
-        [facilityId, slotDate, startTime, endTime, intendedActivity || null, memberId]
-    );
-    const bookingDetailId = detailResult.rows[0].booking_detail_id;
+    // 5. Transactional inserts: booking_details + booking_requests + optional matching_request
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
 
-    // 6. Insert booking_requests
-    const requestResult = await pool.query(
-        `INSERT INTO public.booking_requests (booking_detail_id, request_status)
-     VALUES ($1, 'pending')
-     RETURNING booking_request_id, request_status, created_at`,
-        [bookingDetailId]
-    );
+        const detailResult = await client.query(
+            `INSERT INTO public.booking_details
+               (facility_id, date, start_time, end_time, intended_activity, member_id)
+             VALUES ($1, $2, $3, $4, $5, $6)
+             RETURNING booking_detail_id`,
+            [facilityId, slotDate, startTime, endTime, intendedActivity || null, memberId]
+        );
+        const bookingDetailId = detailResult.rows[0].booking_detail_id;
 
-    return {
-        bookingRequestId: requestResult.rows[0].booking_request_id,
-        bookingDetailId,
-        status: requestResult.rows[0].request_status,
-        createdAt: requestResult.rows[0].created_at,
-    };
+        const requestResult = await client.query(
+            `INSERT INTO public.booking_requests (booking_detail_id, request_status)
+             VALUES ($1, 'pending')
+             RETURNING booking_request_id, request_status, created_at`,
+            [bookingDetailId]
+        );
+        const bookingRequest = requestResult.rows[0];
+        const bookingRequestId = bookingRequest.booking_request_id;
+
+        let matchingRequestId = null;
+        if (partnerMemberId != null) {
+            const matchResult = await client.query(
+                `INSERT INTO public.matching_requests
+                   (sender_id, receiver_id, booking_request_id, status)
+                 VALUES ($1, $2, $3, 'pending')
+                 RETURNING request_matching_id`,
+                [memberId, parseInt(partnerMemberId, 10), bookingRequestId]
+            );
+            matchingRequestId = matchResult.rows[0].request_matching_id;
+        }
+
+        await client.query('COMMIT');
+
+        return {
+            bookingRequestId,
+            bookingDetailId,
+            status: bookingRequest.request_status,
+            createdAt: bookingRequest.created_at,
+            partnerMatchingCreated: partnerMemberId != null,
+            ...(matchingRequestId != null && { matchingRequestId }),
+        };
+    } catch (err) {
+        await client.query('ROLLBACK');
+        throw err;
+    } finally {
+        client.release();
+    }
 };
 
 /**

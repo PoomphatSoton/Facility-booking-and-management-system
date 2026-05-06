@@ -131,6 +131,7 @@ export interface SubmitBookingRequestPayload {
   endTime: string;
   intendedActivity: string;
   customTime?: boolean;
+  partnerMemberId?: number;
 }
 
 export interface SubmitBookingRequestResponse {

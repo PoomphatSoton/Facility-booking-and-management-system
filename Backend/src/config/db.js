@@ -314,6 +314,12 @@ await pool.query(`
 `);
 
   await pool.query(`
+  ALTER TABLE public.matching_requests
+  ADD COLUMN IF NOT EXISTS booking_request_id INTEGER
+    REFERENCES public.booking_requests(booking_request_id) ON DELETE CASCADE
+`);
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS public.equipment_reports (
       report_id SERIAL PRIMARY KEY,
       member_id INTEGER REFERENCES public.members(member_id) ON DELETE SET NULL,

@@ -50,6 +50,9 @@ const getPartners = async ({ userId }) => {
       ) pps ON true
       WHERE m.member_id <> $1
         AND u.role = 'member'
+        AND u.account_status = 'active'
+        AND u.firebase_uid IS NOT NULL
+        AND m.member_status = 'active'
         AND pp.is_active = TRUE
       ORDER BY u.first_name ASC, u.last_name ASC
     `,
@@ -94,12 +97,25 @@ const getIncomingRequests = async ({ userId }) => {
         sender.member_id AS sender_member_id,
         u.first_name,
         u.last_name,
-        u.email
+        u.email,
+        mr.booking_request_id,
+        br.request_status AS booking_request_status,
+        TO_CHAR(bd.date, 'YYYY-MM-DD') AS booking_date,
+        TO_CHAR(bd.start_time, 'HH24:MI') AS booking_start_time,
+        TO_CHAR(bd.end_time, 'HH24:MI') AS booking_end_time,
+        bd.intended_activity AS booking_intended_activity,
+        f.name AS booking_facility_name
       FROM public.matching_requests mr
       JOIN public.members sender
         ON mr.sender_id = sender.member_id
       JOIN public.users u
         ON sender.user_id = u.id
+      LEFT JOIN public.booking_requests br
+        ON mr.booking_request_id = br.booking_request_id
+      LEFT JOIN public.booking_details bd
+        ON br.booking_detail_id = bd.booking_detail_id
+      LEFT JOIN public.facilities f
+        ON bd.facility_id = f.facility_id
       WHERE mr.receiver_id = $1
       ORDER BY mr.created_at DESC
     `,
