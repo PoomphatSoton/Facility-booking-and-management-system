@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate, useLocation } from "react-router";
+import { useNavigate, useLocation, Link } from "react-router";
 import FacilityCard from "./facility-card";
 import "./facility.css";
 import "../admin/admin-page.css";
@@ -141,11 +141,18 @@ export default function FacilityList() {
                     <h1>Browse Facilities</h1>
                     <p>Find and reserve sports facilities easily</p>
                 </div>
-                {isAdmin && (
-                    <Button variant="primary" onClick={() => navigate("/admin/facility/create")}>
-                        Create Facility
-                    </Button>
-                )}
+                <div className="d-flex gap-2">
+                    {!isAdmin && (
+                        <Button variant="outline-secondary" as={Link as any} to="/facilities/map">
+                            View on Map
+                        </Button>
+                    )}
+                    {isAdmin && (
+                        <Button variant="primary" onClick={() => navigate("/admin/facility/create")}>
+                            Create Facility
+                        </Button>
+                    )}
+                </div>
             </div>
 
             <div className="facility-toolbar">

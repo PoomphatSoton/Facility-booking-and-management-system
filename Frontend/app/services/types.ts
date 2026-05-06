@@ -80,6 +80,8 @@ export interface FacilityCardItem {
   maxDurationMinutes: number | null;
   availableTime: FacilityAvailableTime | null;
   otherAvailableTimes: FacilityAvailableTime[];
+  latitude?: number | null;
+  longitude?: number | null;
 }
 
 export interface FacilityCardsResponse {

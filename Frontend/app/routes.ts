@@ -3,6 +3,7 @@ import { type RouteConfig, route, layout } from "@react-router/dev/routes";
 export default [
   layout("routes/member-layout.tsx", [
     route("", "facility/facility-list.tsx"),
+    route("facilities/map", "facility/facilities-map.tsx"),
     route("equipment-reports", "equipment-report/equipment-report-list.tsx"),
     route("find-partners", "partner-matching/find-partners.tsx"),
     route("partner-requests", "partner-matching/partner-requests.tsx"),

@@ -191,6 +191,23 @@ await pool.query(`
   `);
 
   await pool.query(`
+    ALTER TABLE public.facilities
+    ADD COLUMN IF NOT EXISTS latitude  DECIMAL(10, 7),
+    ADD COLUMN IF NOT EXISTS longitude DECIMAL(10, 7)
+  `);
+
+  // Seed map coordinates for any facility that doesn't have them yet.
+  // Coordinates are spread around the University of Southampton Jubilee Sports Centre
+  // (approx. 50.9346, -1.3947) as realistic placeholder positions.
+  await pool.query(`
+    UPDATE public.facilities
+    SET
+      latitude  = 50.9346 + ((facility_id % 5) - 2) * 0.0004,
+      longitude = -1.3947 + ((facility_id % 3) - 1) * 0.0006
+    WHERE latitude IS NULL
+  `);
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS public.facility_schedules (
       schedule_id SERIAL PRIMARY KEY,
       facility_id INTEGER NOT NULL REFERENCES public.facilities(facility_id) ON DELETE CASCADE,
