@@ -30,10 +30,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
           const { data } = await api.get<{ user: User }>("/auth/me");
 
-          if (data.user.role === "member" && !firebaseUser.emailVerified) {
-            setUser(null);
-            return;
-          }
+          // if (data.user.role === "member" && !firebaseUser.emailVerified) {
+          //   setUser(null);
+          //   return;
+          // }
 
           setUser(data.user);
         } catch {

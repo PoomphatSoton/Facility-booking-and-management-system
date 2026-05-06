@@ -1,5 +1,75 @@
 const { pool } = require('../config/db');
 
+// === Helpers for opening-hours / max-duration validation ===
+const DAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+
+const toMinutes = (timeStr) => {
+    const [h, m] = timeStr.split(':').map(Number);
+    return h * 60 + m;
+};
+
+const getDayKey = (slotDateStr) => {
+    // slotDateStr is 'YYYY-MM-DD'; build a local Date so getDay() matches the user's calendar day
+    const [y, mo, d] = slotDateStr.split('-').map(Number);
+    return DAY_KEYS[new Date(y, mo - 1, d).getDay()];
+};
+
+/**
+ * Validate that [startTime, endTime] on the given date fits inside the facility's
+ * opening hours and does not exceed max_duration_minutes.
+ * Returns null if valid, otherwise an Error with code OUTSIDE_OPENING_HOURS / DURATION_EXCEEDED.
+ */
+const validateBookingWindow = async (facilityId, slotDate, startTime, endTime) => {
+    // 1. Get max duration
+    const facilityResult = await pool.query(
+        `SELECT max_duration_minutes FROM public.facilities WHERE facility_id = $1`,
+        [facilityId]
+    );
+    if (facilityResult.rows.length === 0) {
+        return new Error('FACILITY_NOT_FOUND');
+    }
+    const maxDurationMinutes = facilityResult.rows[0].max_duration_minutes;
+
+    // 2. Duration check (NULL means no limit)
+    const requestedMinutes = toMinutes(endTime) - toMinutes(startTime);
+    if (maxDurationMinutes != null && requestedMinutes > maxDurationMinutes) {
+        const err = new Error('DURATION_EXCEEDED');
+        err.maxDurationMinutes = maxDurationMinutes;
+        err.requestedMinutes = requestedMinutes;
+        return err;
+    }
+
+    // 3. Opening-hours check
+    const dayKey = getDayKey(slotDate);
+    const scheduleResult = await pool.query(
+        `SELECT TO_CHAR(start_time, 'HH24:MI') AS start_time,
+                TO_CHAR(end_time,   'HH24:MI') AS end_time
+           FROM public.facility_schedules
+          WHERE facility_id = $1 AND day_of_week = $2`,
+        [facilityId, dayKey]
+    );
+
+    if (scheduleResult.rows.length === 0) {
+        // No schedule for that weekday => facility closed that day
+        const err = new Error('OUTSIDE_OPENING_HOURS');
+        err.dayKey = dayKey;
+        err.windows = [];
+        return err;
+    }
+
+    const fitsWindow = scheduleResult.rows.some(
+        (r) => startTime >= r.start_time && endTime <= r.end_time
+    );
+    if (!fitsWindow) {
+        const err = new Error('OUTSIDE_OPENING_HOURS');
+        err.dayKey = dayKey;
+        err.windows = scheduleResult.rows;
+        return err;
+    }
+
+    return null;
+};
+
 /**
  * Retrieve the available time slots for a specific venue in the next N days
  * @param {number} facilityId - ID
@@ -137,6 +207,11 @@ const submitBookingRequest = async ({
     const todayStr = `${todayLocal.getFullYear()}-${String(todayLocal.getMonth() + 1).padStart(2, '0')}-${String(todayLocal.getDate()).padStart(2, '0')}`;
     if (slotDate < todayStr) {
         throw new Error('DATE_IN_PAST');
+    }
+
+    const windowError = await validateBookingWindow(facilityId, slotDate, startTime, endTime);
+    if (windowError) {
+        throw windowError;
     }
 
     // 4. Check whether this member already has a pending request for the same time slot (to prevent duplicate submissions)
@@ -333,6 +408,28 @@ const checkBookingConflict = async (bookingRequestId, staffId) => {
     const occupied = parseInt(occupancyResult.rows[0].occupied_count, 10);
     if (occupied >= detail.max_people) {
         errors.push('CAPACITY_EXCEEDED');
+    }
+
+    // 6. Re-validate opening hours & duration (admin may have changed them after submission)
+    const detailDateStr = typeof detail.date === 'string'
+        ? detail.date
+        : `${detail.date.getFullYear()}-${String(detail.date.getMonth() + 1).padStart(2, '0')}-${String(detail.date.getDate()).padStart(2, '0')}`;
+
+    const startTimeStr = typeof detail.start_time === 'string'
+        ? detail.start_time.slice(0, 5)
+        : detail.start_time;
+    const endTimeStr = typeof detail.end_time === 'string'
+        ? detail.end_time.slice(0, 5)
+        : detail.end_time;
+
+    const windowError = await validateBookingWindow(
+        detail.facility_id,
+        detailDateStr,
+        startTimeStr,
+        endTimeStr
+    );
+    if (windowError) {
+        errors.push(windowError.message);
     }
 
     return {
@@ -1028,29 +1125,54 @@ const searchAlternativeFacilities = async (bookingRequestId, userId) => {
         throw new Error('REQUEST_NOT_PENDING');
     }
 
+    const requestedMinutes = toMinutes(
+        typeof request.end_time === 'string' ? request.end_time.slice(0, 5) : request.end_time
+    ) - toMinutes(
+        typeof request.start_time === 'string' ? request.start_time.slice(0, 5) : request.start_time
+    );
+
+    const dayKey = getDayKey(
+        typeof request.date === 'string'
+            ? request.date
+            : `${request.date.getFullYear()}-${String(request.date.getMonth() + 1).padStart(2, '0')}-${String(request.date.getDate()).padStart(2, '0')}`
+    );
+
     const alternativesResult = await pool.query(
         `
-    SELECT
-      f.facility_id,
-      f.name,
-      f.description,
-      f.max_people,
-      COALESCE(occupied.cnt, 0) AS occupied_count
-    FROM public.facilities f
-    LEFT JOIN (
-      SELECT bd.facility_id, COUNT(*) AS cnt
-      FROM public.bookings b
-      JOIN public.booking_details bd ON b.booking_detail_id = bd.booking_detail_id
-      WHERE bd.date = $1
-        AND bd.start_time < $3
-        AND bd.end_time > $2
-        AND b.booking_status != 'cancelled'
-      GROUP BY bd.facility_id
-    ) occupied ON occupied.facility_id = f.facility_id
-    WHERE f.facility_id != $4
-    ORDER BY f.name
+            SELECT
+                f.facility_id,
+                f.name,
+                f.description,
+                f.max_people,
+                COALESCE(occupied.cnt, 0) AS occupied_count
+            FROM public.facilities f
+                     LEFT JOIN (
+                SELECT bd.facility_id, COUNT(*) AS cnt
+                FROM public.bookings b
+                         JOIN public.booking_details bd ON b.booking_detail_id = bd.booking_detail_id
+                WHERE bd.date = $1
+                  AND bd.start_time < $3
+                  AND bd.end_time > $2
+                  AND b.booking_status != 'cancelled'
+                GROUP BY bd.facility_id
+            ) occupied ON occupied.facility_id = f.facility_id
+            WHERE f.facility_id != $4
+              AND (f.max_duration_minutes IS NULL OR f.max_duration_minutes >= $5)
+              AND EXISTS (
+                SELECT 1 FROM public.facility_schedules fs
+                WHERE fs.facility_id = f.facility_id
+              AND fs.day_of_week = $6
+              AND fs.start_time <= $2::time
+              AND fs.end_time   >= $3::time
+                )
+            ORDER BY f.name
     `,
-        [request.date, request.start_time, request.end_time, request.facility_id]
+        [request.date,
+            request.start_time,
+            request.end_time,
+            request.facility_id,
+            requestedMinutes,
+            dayKey,]
     );
 
     return alternativesResult.rows

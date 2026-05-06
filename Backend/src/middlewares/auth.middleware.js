@@ -20,9 +20,9 @@ const requireAuth = async (req, res, next) => {
       return res.status(403).json({ message: "account is suspended" });
     }
 
-    if (user.role === "member" && !decoded.email_verified) {
-      return res.status(403).json({ message: "email is not verified" });
-    }
+    // if (user.role === "member" && !decoded.email_verified) {
+    //   return res.status(403).json({ message: "email is not verified" });
+    // }
 
     req.user = {
       id: user.id,

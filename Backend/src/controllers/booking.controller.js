@@ -59,7 +59,8 @@ const submitBookingRequest = async (req, res) => {
             SLOT_NOT_AVAILABLE: 'this slot does not exist or has passed',
             DUPLICATE_REQUEST: 'you already have a pending request for this slot',
             INVALID_TIME_RANGE: 'end time must be after start time',
-            OUTSIDE_OPENING_HOURS: 'booking must be between 08:00 and 22:00',
+            OUTSIDE_OPENING_HOURS: 'requested time is outside the facility opening hours',
+            DURATION_EXCEEDED: 'booking duration exceeds the facility limit',
             DATE_IN_PAST: 'cannot book a date in the past',
         };
 
@@ -129,6 +130,8 @@ const approveRequest = async (req, res) => {
             STAFF_NOT_AUTHORIZED: { status: 403, message: 'you are not authorized for this facility' },
             MEMBER_INACTIVE: { status: 400, message: 'member account is not active' },
             CAPACITY_EXCEEDED: { status: 409, message: 'time slot is full' },
+            OUTSIDE_OPENING_HOURS: { status: 409, message: 'time slot is outside opening hours' },
+            DURATION_EXCEEDED: { status: 409, message: 'duration exceeds facility limit' },
         };
 
         const mapped = errorMap[error.message];
