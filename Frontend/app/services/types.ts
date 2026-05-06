@@ -91,20 +91,31 @@ export interface FacilityCardsResponse {
 
 // ==================== Booking ====================
 
-export interface AvailableSlot {
-  slotTimeId: number;
-  slotDate: string;       // 'YYYY-MM-DD'
-  startTime: string;      // 'HH:MM'
-  endTime: string;        // 'HH:MM'
-  occupied: number;
-  available: boolean;
+export interface OpeningHour {
+  dayOfWeek: 'sun' | 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat';
+  startTime: string;   // 'HH:MM'
+  endTime: string;     // 'HH:MM'
+}
+
+export interface ExistingBooking {
+  date: string;        // 'YYYY-MM-DD'
+  startTime: string;   // 'HH:MM'
+  endTime: string;     // 'HH:MM'
 }
 
 export interface FacilitySlots {
   facilityId: number;
   facilityName: string;
   maxPeople: number;
-  slots: AvailableSlot[];
+  maxDurationMinutes: number | null;
+  openingHours: OpeningHour[];
+  existingBookings: ExistingBooking[];
+}
+
+export interface FacilitySlotsResponse {
+  status: 'ok' | 'error';
+  data: FacilitySlots;
+  message?: string;
 }
 
 export interface FacilitySlotsResponse {

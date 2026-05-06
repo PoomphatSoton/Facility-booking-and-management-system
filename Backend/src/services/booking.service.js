@@ -76,88 +76,151 @@ const validateBookingWindow = async (facilityId, slotDate, startTime, endTime) =
  * @param {number} daysAhead - 7
  * @returns {Array} slotDate, startTime, endTime, available
  */
+// const getAvailableSlots = async (facilityId, daysAhead = 30) => {
+//     // 1. First verify that the venue exists and retrieve max_people at the same time
+//     const facilityResult = await pool.query(
+//         `SELECT facility_id, name, max_people
+//      FROM public.facilities
+//      WHERE facility_id = $1`,
+//         [facilityId]
+//     );
+//
+//     if (facilityResult.rows.length === 0) {
+//         throw new Error('FACILITY_NOT_FOUND');
+//     }
+//
+//     const facility = facilityResult.rows[0];
+//     const maxPeople = facility.max_people;
+//
+//     // 2. Query all predefined time slots for the next N days
+//     const slotsResult = await pool.query(
+//         `SELECT
+//         slot_time_id,
+//         slot_date,
+//         TO_CHAR(slot_start_time, 'HH24:MI') AS start_time,
+//         TO_CHAR(slot_end_time, 'HH24:MI') AS end_time
+//      FROM public.facility_slot_times
+//      WHERE facility_id = $1
+//        AND slot_date >= CURRENT_DATE
+//        AND slot_date < CURRENT_DATE + ($2 || ' days')::interval
+//      ORDER BY slot_date, slot_start_time`,
+//         [facilityId, daysAhead]
+//     );
+//
+//     const slots = slotsResult.rows;
+//
+//     if (slots.length === 0) {
+//         return { facilityId, facilityName: facility.name, maxPeople, slots: [] };
+//     }
+//
+//     const bookingsResult = await pool.query(
+//         `SELECT
+//         TO_CHAR(bd.date, 'YYYY-MM-DD') AS date,
+//         TO_CHAR(bd.start_time, 'HH24:MI') AS start_time,
+//         TO_CHAR(bd.end_time, 'HH24:MI') AS end_time
+//      FROM public.bookings b
+//      JOIN public.booking_details bd ON b.booking_detail_id = bd.booking_detail_id
+//      WHERE bd.facility_id = $1
+//        AND bd.date >= CURRENT_DATE
+//        AND bd.date < CURRENT_DATE + ($2 || ' days')::interval
+//        AND b.booking_status != 'cancelled'`,
+//         [facilityId, daysAhead]
+//     );
+//
+//     const existingBookings = bookingsResult.rows;
+//
+//     // 4. Calculate the occupancy count using the overlap algorithm
+//     const enrichedSlots = slots.map((slot) => {
+//         const dateStr = slot.slot_date;
+//
+//         const occupied = existingBookings.filter((booking) => {
+//             if (booking.date !== dateStr) return false;
+//             // booking.start < slot.end AND booking.end > slot.start
+//             const bookingStart = booking.start_time;
+//             const bookingEnd = booking.end_time;
+//             const slotStart = slot.start_time;
+//             const slotEnd = slot.end_time;
+//             return bookingStart < slotEnd && bookingEnd > slotStart;
+//         }).length;
+//
+//         return {
+//             slotTimeId: slot.slot_time_id,
+//             slotDate: dateStr,
+//             startTime: slot.start_time,
+//             endTime: slot.end_time,
+//             occupied,
+//             available: occupied < maxPeople,
+//         };
+//     });
+//
+//     return {
+//         facilityId: facility.facility_id,
+//         facilityName: facility.name,
+//         maxPeople,
+//         slots: enrichedSlots,
+//     };
+// };
+
+/**
+ * Retrieve facility info: opening hours per weekday + existing bookings for the next N days.
+ * Used by the new-booking page to drive date/time pickers.
+ */
 const getAvailableSlots = async (facilityId, daysAhead = 30) => {
-    // 1. First verify that the venue exists and retrieve max_people at the same time
+    // 1. Verify facility exists; pull max_people and max_duration_minutes
     const facilityResult = await pool.query(
-        `SELECT facility_id, name, max_people 
-     FROM public.facilities 
-     WHERE facility_id = $1`,
+        `SELECT facility_id, name, max_people, max_duration_minutes
+           FROM public.facilities
+          WHERE facility_id = $1`,
         [facilityId]
     );
-
     if (facilityResult.rows.length === 0) {
         throw new Error('FACILITY_NOT_FOUND');
     }
-
     const facility = facilityResult.rows[0];
-    const maxPeople = facility.max_people;
 
-    // 2. Query all predefined time slots for the next N days
-    const slotsResult = await pool.query(
-        `SELECT 
-        slot_time_id,
-        slot_date,
-        TO_CHAR(slot_start_time, 'HH24:MI') AS start_time,
-        TO_CHAR(slot_end_time, 'HH24:MI') AS end_time
-     FROM public.facility_slot_times
-     WHERE facility_id = $1
-       AND slot_date >= CURRENT_DATE
-       AND slot_date < CURRENT_DATE + ($2 || ' days')::interval
-     ORDER BY slot_date, slot_start_time`,
-        [facilityId, daysAhead]
+    // 2. Opening hours per weekday (one weekday can have multiple windows)
+    const scheduleResult = await pool.query(
+        `SELECT day_of_week,
+                TO_CHAR(start_time, 'HH24:MI') AS start_time,
+                TO_CHAR(end_time,   'HH24:MI') AS end_time
+           FROM public.facility_schedules
+          WHERE facility_id = $1
+          ORDER BY day_of_week, start_time`,
+        [facilityId]
     );
+    const openingHours = scheduleResult.rows.map((r) => ({
+        dayOfWeek: r.day_of_week,
+        startTime: r.start_time,
+        endTime: r.end_time,
+    }));
 
-    const slots = slotsResult.rows;
-
-    if (slots.length === 0) {
-        return { facilityId, facilityName: facility.name, maxPeople, slots: [] };
-    }
-
+    // 3. Existing (non-cancelled) bookings in the next N days, for occupancy display
     const bookingsResult = await pool.query(
-        `SELECT 
-        TO_CHAR(bd.date, 'YYYY-MM-DD') AS date,
-        TO_CHAR(bd.start_time, 'HH24:MI') AS start_time,
-        TO_CHAR(bd.end_time, 'HH24:MI') AS end_time
-     FROM public.bookings b
-     JOIN public.booking_details bd ON b.booking_detail_id = bd.booking_detail_id
-     WHERE bd.facility_id = $1
-       AND bd.date >= CURRENT_DATE
-       AND bd.date < CURRENT_DATE + ($2 || ' days')::interval
-       AND b.booking_status != 'cancelled'`,
+        `SELECT TO_CHAR(bd.date, 'YYYY-MM-DD') AS date,
+                TO_CHAR(bd.start_time, 'HH24:MI') AS start_time,
+                TO_CHAR(bd.end_time,   'HH24:MI') AS end_time
+           FROM public.bookings b
+           JOIN public.booking_details bd ON b.booking_detail_id = bd.booking_detail_id
+          WHERE bd.facility_id = $1
+            AND bd.date >= CURRENT_DATE
+            AND bd.date < CURRENT_DATE + ($2 || ' days')::interval
+            AND b.booking_status != 'cancelled'
+          ORDER BY bd.date, bd.start_time`,
         [facilityId, daysAhead]
     );
-
-    const existingBookings = bookingsResult.rows;
-
-    // 4. Calculate the occupancy count using the overlap algorithm
-    const enrichedSlots = slots.map((slot) => {
-        const dateStr = slot.slot_date;
-
-        const occupied = existingBookings.filter((booking) => {
-            if (booking.date !== dateStr) return false;
-            // booking.start < slot.end AND booking.end > slot.start
-            const bookingStart = booking.start_time;
-            const bookingEnd = booking.end_time;
-            const slotStart = slot.start_time;
-            const slotEnd = slot.end_time;
-            return bookingStart < slotEnd && bookingEnd > slotStart;
-        }).length;
-
-        return {
-            slotTimeId: slot.slot_time_id,
-            slotDate: dateStr,
-            startTime: slot.start_time,
-            endTime: slot.end_time,
-            occupied,
-            available: occupied < maxPeople,
-        };
-    });
+    const existingBookings = bookingsResult.rows.map((r) => ({
+        date: r.date,
+        startTime: r.start_time,
+        endTime: r.end_time,
+    }));
 
     return {
         facilityId: facility.facility_id,
         facilityName: facility.name,
-        maxPeople,
-        slots: enrichedSlots,
+        maxPeople: facility.max_people,
+        maxDurationMinutes: facility.max_duration_minutes,  // null = no limit
+        openingHours,        // [{ dayOfWeek: 'mon', startTime: '09:00', endTime: '22:00' }, ...]
+        existingBookings,    // [{ date, startTime, endTime }, ...]
     };
 };
 
