@@ -6,89 +6,97 @@ const { pool } = require('../config/db');
  * @param {number} daysAhead - 7
  * @returns {Array} slotDate, startTime, endTime, available
  */
-const getAvailableSlots = async (facilityId, daysAhead = 30) => {
-    // 1. First verify that the venue exists and retrieve max_people at the same time
+const DAY_NAMES = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+
+const getDayOfWeek = (dateStr) => {
+    const [y, m, d] = dateStr.split('-').map(Number);
+    return DAY_NAMES[new Date(y, m - 1, d).getDay()];
+};
+
+const toMinutes = (t) => {
+    const [h, m] = t.split(':').map(Number);
+    return h * 60 + m;
+};
+
+const padTime = (minutes) => {
+    const h = Math.floor(minutes / 60);
+    const m = minutes % 60;
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+};
+
+const getAvailableSlots = async (facilityId, date) => {
     const facilityResult = await pool.query(
-        `SELECT facility_id, name, max_people 
-     FROM public.facilities 
-     WHERE facility_id = $1`,
+        `SELECT facility_id, name, max_people, max_duration_minutes, usage_guideline
+         FROM public.facilities WHERE facility_id = $1`,
         [facilityId]
     );
-
-    if (facilityResult.rows.length === 0) {
-        throw new Error('FACILITY_NOT_FOUND');
-    }
-
+    if (facilityResult.rows.length === 0) throw new Error('FACILITY_NOT_FOUND');
     const facility = facilityResult.rows[0];
-    const maxPeople = facility.max_people;
 
-    // 2. Query all predefined time slots for the next N days
-    const slotsResult = await pool.query(
-        `SELECT 
-        slot_time_id,
-        slot_date,
-        TO_CHAR(slot_start_time, 'HH24:MI') AS start_time,
-        TO_CHAR(slot_end_time, 'HH24:MI') AS end_time
-     FROM public.facility_slot_times
-     WHERE facility_id = $1
-       AND slot_date >= CURRENT_DATE
-       AND slot_date < CURRENT_DATE + ($2 || ' days')::interval
-     ORDER BY slot_date, slot_start_time`,
-        [facilityId, daysAhead]
-    );
+    const dayOfWeek = getDayOfWeek(date);
 
-    const slots = slotsResult.rows;
+    const [scheduleResult, allSchedulesResult] = await Promise.all([
+        pool.query(
+            `SELECT TO_CHAR(start_time, 'HH24:MI') AS start_time, TO_CHAR(end_time, 'HH24:MI') AS end_time
+             FROM public.facility_schedules WHERE facility_id = $1 AND day_of_week = $2`,
+            [facilityId, dayOfWeek]
+        ),
+        pool.query(
+            `SELECT day_of_week, TO_CHAR(start_time, 'HH24:MI') AS start_time, TO_CHAR(end_time, 'HH24:MI') AS end_time
+             FROM public.facility_schedules WHERE facility_id = $1
+             ORDER BY ARRAY_POSITION(ARRAY['sun','mon','tue','wed','thu','fri','sat'], day_of_week)`,
+            [facilityId]
+        ),
+    ]);
 
-    if (slots.length === 0) {
-        return { facilityId, facilityName: facility.name, maxPeople, slots: [] };
-    }
+    const schedules = allSchedulesResult.rows.map((r) => ({
+        dayOfWeek: r.day_of_week,
+        startTime: r.start_time,
+        endTime: r.end_time,
+    }));
 
-    const bookingsResult = await pool.query(
-        `SELECT 
-        TO_CHAR(bd.date, 'YYYY-MM-DD') AS date,
-        TO_CHAR(bd.start_time, 'HH24:MI') AS start_time,
-        TO_CHAR(bd.end_time, 'HH24:MI') AS end_time
-     FROM public.bookings b
-     JOIN public.booking_details bd ON b.booking_detail_id = bd.booking_detail_id
-     WHERE bd.facility_id = $1
-       AND bd.date >= CURRENT_DATE
-       AND bd.date < CURRENT_DATE + ($2 || ' days')::interval
-       AND b.booking_status != 'cancelled'`,
-        [facilityId, daysAhead]
-    );
-
-    const existingBookings = bookingsResult.rows;
-
-    // 4. Calculate the occupancy count using the overlap algorithm
-    const enrichedSlots = slots.map((slot) => {
-        const dateStr = slot.slot_date;
-
-        const occupied = existingBookings.filter((booking) => {
-            if (booking.date !== dateStr) return false;
-            // booking.start < slot.end AND booking.end > slot.start
-            const bookingStart = booking.start_time;
-            const bookingEnd = booking.end_time;
-            const slotStart = slot.start_time;
-            const slotEnd = slot.end_time;
-            return bookingStart < slotEnd && bookingEnd > slotStart;
-        }).length;
-
-        return {
-            slotTimeId: slot.slot_time_id,
-            slotDate: dateStr,
-            startTime: slot.start_time,
-            endTime: slot.end_time,
-            occupied,
-            available: occupied < maxPeople,
-        };
-    });
-
-    return {
+    const base = {
         facilityId: facility.facility_id,
         facilityName: facility.name,
-        maxPeople,
-        slots: enrichedSlots,
+        maxPeople: facility.max_people,
+        maxDurationMinutes: facility.max_duration_minutes ?? null,
+        usageGuideline: facility.usage_guideline ?? null,
+        schedules,
+        date,
     };
+
+    if (scheduleResult.rows.length === 0) {
+        return { ...base, slots: [] };
+    }
+
+    const { start_time, end_time } = scheduleResult.rows[0];
+    const startMin = toMinutes(start_time);
+    const endMin = toMinutes(end_time);
+
+    const slotTimes = [];
+    for (let t = startMin; t + 60 <= endMin; t += 60) {
+        slotTimes.push({ startTime: padTime(t), endTime: padTime(t + 60) });
+    }
+
+    // Get all bookings for the day to calculate per-slot occupancy using overlap
+    const bookingsResult = await pool.query(
+        `SELECT TO_CHAR(bd.start_time, 'HH24:MI') AS start_time, TO_CHAR(bd.end_time, 'HH24:MI') AS end_time
+         FROM public.bookings b
+         JOIN public.booking_details bd ON b.booking_detail_id = bd.booking_detail_id
+         WHERE bd.facility_id = $1 AND bd.date = $2 AND b.booking_status = 'upcoming'`,
+        [facilityId, date]
+    );
+
+    const bookings = bookingsResult.rows;
+
+    const slots = slotTimes.map(({ startTime, endTime }) => {
+        const occupied = bookings.filter(
+            (b) => b.start_time < endTime && b.end_time > startTime
+        ).length;
+        return { startTime, endTime, occupied, available: occupied < facility.max_people };
+    });
+
+    return { ...base, slots };
 };
 
 /**
@@ -102,75 +110,80 @@ const getAvailableSlots = async (facilityId, daysAhead = 30) => {
  * @param {string} params.intendedActivity
  * @returns {Object}
  */
-const submitBookingRequest = async ({
-                                        userId,
-                                        facilityId,
-                                        slotDate,
-                                        startTime,
-                                        endTime,
-                                        intendedActivity,
-                                    }) => {
-    // 1. Find the member_id corresponding to the current user
+const submitBookingRequest = async ({ userId, facilityId, slotDate, startTime, endTime, intendedActivity }) => {
     const memberResult = await pool.query(
-        `SELECT member_id FROM public.members WHERE user_id = $1`,
-        [userId]
+        `SELECT member_id FROM public.members WHERE user_id = $1`, [userId]
     );
-    if (memberResult.rows.length === 0) {
-        throw new Error('MEMBER_NOT_FOUND');
-    }
+    if (memberResult.rows.length === 0) throw new Error('MEMBER_NOT_FOUND');
     const memberId = memberResult.rows[0].member_id;
 
-    // 2. Check if the venue exists
     const facilityResult = await pool.query(
-        `SELECT facility_id FROM public.facilities WHERE facility_id = $1`,
+        `SELECT facility_id, max_people, max_duration_minutes FROM public.facilities WHERE facility_id = $1`,
         [facilityId]
     );
-    if (facilityResult.rows.length === 0) {
-        throw new Error('FACILITY_NOT_FOUND');
-    }
+    if (facilityResult.rows.length === 0) throw new Error('FACILITY_NOT_FOUND');
+    const facility = facilityResult.rows[0];
 
-    if (startTime >= endTime) {
-        throw new Error('INVALID_TIME_RANGE');
-    }
+    if (startTime >= endTime) throw new Error('INVALID_TIME_RANGE');
 
     const todayLocal = new Date();
     const todayStr = `${todayLocal.getFullYear()}-${String(todayLocal.getMonth() + 1).padStart(2, '0')}-${String(todayLocal.getDate()).padStart(2, '0')}`;
-    if (slotDate < todayStr) {
-        throw new Error('DATE_IN_PAST');
+    if (slotDate < todayStr) throw new Error('DATE_IN_PAST');
+
+    // Validate against facility schedule
+    const dayOfWeek = getDayOfWeek(slotDate);
+    const scheduleResult = await pool.query(
+        `SELECT TO_CHAR(start_time, 'HH24:MI') AS start_time, TO_CHAR(end_time, 'HH24:MI') AS end_time
+         FROM public.facility_schedules WHERE facility_id = $1 AND day_of_week = $2`,
+        [facilityId, dayOfWeek]
+    );
+    if (scheduleResult.rows.length === 0) throw new Error('FACILITY_CLOSED_ON_DAY');
+    const schedule = scheduleResult.rows[0];
+    if (startTime < schedule.start_time || endTime > schedule.end_time) throw new Error('OUTSIDE_SCHEDULE');
+
+    // Check max_duration_minutes
+    if (facility.max_duration_minutes) {
+        const duration = toMinutes(endTime) - toMinutes(startTime);
+        if (duration > facility.max_duration_minutes) throw new Error('EXCEEDS_MAX_DURATION');
     }
 
-    // 4. Check whether this member already has a pending request for the same time slot (to prevent duplicate submissions)
+    // Check capacity for every 1-hour slot in the requested range
+    const startMin = toMinutes(startTime);
+    const endMin = toMinutes(endTime);
+    for (let t = startMin; t < endMin; t += 60) {
+        const slotStart = padTime(t);
+        const slotEnd = padTime(t + 60);
+        const { rows } = await pool.query(
+            `SELECT COUNT(*) AS cnt FROM public.bookings b
+             JOIN public.booking_details bd ON b.booking_detail_id = bd.booking_detail_id
+             WHERE bd.facility_id = $1 AND bd.date = $2
+               AND bd.start_time < $4 AND bd.end_time > $3
+               AND b.booking_status = 'upcoming'`,
+            [facilityId, slotDate, slotStart, slotEnd]
+        );
+        if (parseInt(rows[0].cnt, 10) >= facility.max_people) throw new Error('CAPACITY_EXCEEDED');
+    }
+
+    // Duplicate check
     const duplicateResult = await pool.query(
-        `SELECT br.booking_request_id
-     FROM public.booking_requests br
-     JOIN public.booking_details bd ON br.booking_detail_id = bd.booking_detail_id
-     WHERE bd.member_id = $1
-       AND bd.facility_id = $2
-       AND bd.date = $3
-       AND bd.start_time = $4
-       AND bd.end_time = $5
-       AND br.request_status = 'pending'`,
+        `SELECT br.booking_request_id FROM public.booking_requests br
+         JOIN public.booking_details bd ON br.booking_detail_id = bd.booking_detail_id
+         WHERE bd.member_id = $1 AND bd.facility_id = $2 AND bd.date = $3
+           AND bd.start_time = $4 AND bd.end_time = $5 AND br.request_status = 'pending'`,
         [memberId, facilityId, slotDate, startTime, endTime]
     );
-    if (duplicateResult.rows.length > 0) {
-        throw new Error('DUPLICATE_REQUEST');
-    }
+    if (duplicateResult.rows.length > 0) throw new Error('DUPLICATE_REQUEST');
 
-    // 5. Insert booking_details
     const detailResult = await pool.query(
-        `INSERT INTO public.booking_details 
-       (facility_id, date, start_time, end_time, intended_activity, member_id)
-     VALUES ($1, $2, $3, $4, $5, $6)
-     RETURNING booking_detail_id`,
+        `INSERT INTO public.booking_details (facility_id, date, start_time, end_time, intended_activity, member_id)
+         VALUES ($1, $2, $3, $4, $5, $6) RETURNING booking_detail_id`,
         [facilityId, slotDate, startTime, endTime, intendedActivity || null, memberId]
     );
     const bookingDetailId = detailResult.rows[0].booking_detail_id;
 
-    // 6. Insert booking_requests
     const requestResult = await pool.query(
         `INSERT INTO public.booking_requests (booking_detail_id, request_status)
-     VALUES ($1, 'pending')
-     RETURNING booking_request_id, request_status, created_at`,
+         VALUES ($1, 'pending') RETURNING booking_request_id, request_status, created_at`,
         [bookingDetailId]
     );
 
@@ -332,6 +345,7 @@ const checkBookingConflict = async (bookingRequestId, staffId) => {
     );
     const occupied = parseInt(occupancyResult.rows[0].occupied_count, 10);
     if (occupied >= detail.max_people) {
+        console.log("max_people:", detail.max_people, "occupied:", occupied);
         errors.push('CAPACITY_EXCEEDED');
     }
 

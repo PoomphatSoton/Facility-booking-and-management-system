@@ -3,29 +3,22 @@ const bookingService = require('../services/booking.service');
 const getAvailableSlots = async (req, res) => {
     try {
         const facilityId = parseInt(req.params.facilityId, 10);
-
         if (isNaN(facilityId)) {
-            return res.status(400).json({
-                status: 'error',
-                message: 'invalid facility id'
-            });
+            return res.status(400).json({ status: 'error', message: 'invalid facility id' });
         }
 
-        const result = await bookingService.getAvailableSlots(facilityId);
+        const today = new Date();
+        const defaultDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+        const date = req.query.date || defaultDate;
+
+        const result = await bookingService.getAvailableSlots(facilityId, date);
         return res.status(200).json({ status: 'ok', data: result });
     } catch (error) {
         if (error.message === 'FACILITY_NOT_FOUND') {
-            return res.status(404).json({
-                status: 'error',
-                message: 'facility not found'
-            });
+            return res.status(404).json({ status: 'error', message: 'facility not found' });
         }
         console.error('getAvailableSlots error:', error);
-        return res.status(500).json({
-            status: 'error',
-            message: 'internal server error',
-            detail: error.message
-        });
+        return res.status(500).json({ status: 'error', message: 'internal server error', detail: error.message });
     }
 };
 
@@ -48,7 +41,6 @@ const submitBookingRequest = async (req, res) => {
             startTime,
             endTime,
             intendedActivity,
-            customTime: req.body.customTime || false,
         });
 
         return res.status(201).json({ status: 'ok', data: result });
@@ -56,11 +48,13 @@ const submitBookingRequest = async (req, res) => {
         const errorMessages = {
             MEMBER_NOT_FOUND: 'member account not found',
             FACILITY_NOT_FOUND: 'facility not found',
-            SLOT_NOT_AVAILABLE: 'this slot does not exist or has passed',
             DUPLICATE_REQUEST: 'you already have a pending request for this slot',
             INVALID_TIME_RANGE: 'end time must be after start time',
-            OUTSIDE_OPENING_HOURS: 'booking must be between 08:00 and 22:00',
             DATE_IN_PAST: 'cannot book a date in the past',
+            FACILITY_CLOSED_ON_DAY: 'facility is closed on the selected day',
+            OUTSIDE_SCHEDULE: 'selected time is outside facility opening hours',
+            EXCEEDS_MAX_DURATION: 'booking duration exceeds the maximum allowed',
+            CAPACITY_EXCEEDED: 'this time slot is fully booked',
         };
 
         if (errorMessages[error.message]) {

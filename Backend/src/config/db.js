@@ -249,8 +249,19 @@ const initDb = async () => {
       booking_detail_id INTEGER NOT NULL REFERENCES public.booking_details(booking_detail_id) ON DELETE CASCADE,
       request_status TEXT NOT NULL DEFAULT 'pending',
       created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-      CONSTRAINT booking_requests_request_status_check CHECK (request_status IN ('pending', 'approved', 'rejected'))
+      CONSTRAINT booking_requests_request_status_check CHECK (request_status IN ('pending', 'approved', 'rejected', 'cancelled', 'alt_suggested'))
     )
+  `);
+
+  await pool.query(`
+    ALTER TABLE public.booking_requests
+    DROP CONSTRAINT IF EXISTS booking_requests_request_status_check
+  `);
+
+  await pool.query(`
+    ALTER TABLE public.booking_requests
+    ADD CONSTRAINT booking_requests_request_status_check
+    CHECK (request_status IN ('pending', 'approved', 'rejected', 'cancelled', 'alt_suggested'))
   `);
 
   await pool.query(`

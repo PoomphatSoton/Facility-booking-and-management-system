@@ -92,18 +92,26 @@ export interface FacilityCardsResponse {
 // ==================== Booking ====================
 
 export interface AvailableSlot {
-  slotTimeId: number;
-  slotDate: string;       // 'YYYY-MM-DD'
   startTime: string;      // 'HH:MM'
   endTime: string;        // 'HH:MM'
   occupied: number;
   available: boolean;
 }
 
+export interface FacilitySchedule {
+  dayOfWeek: string;
+  startTime: string;
+  endTime: string;
+}
+
 export interface FacilitySlots {
   facilityId: number;
   facilityName: string;
   maxPeople: number;
+  maxDurationMinutes: number | null;
+  usageGuideline: string | null;
+  schedules: FacilitySchedule[];
+  date: string;           // 'YYYY-MM-DD'
   slots: AvailableSlot[];
 }
 
@@ -119,7 +127,6 @@ export interface SubmitBookingRequestPayload {
   startTime: string;
   endTime: string;
   intendedActivity: string;
-  customTime?: boolean;
 }
 
 export interface SubmitBookingRequestResponse {
