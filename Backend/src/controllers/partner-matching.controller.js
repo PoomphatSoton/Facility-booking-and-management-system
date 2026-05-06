@@ -19,7 +19,7 @@ const getPartners = async (req, res) => {
 
 const createMatchRequest = async (req, res) => {
   try {
-    const { receiverMemberId } = req.body;
+    const { receiverMemberId, bookingId } = req.body;
 
     if (!receiverMemberId) {
       return res.status(400).json({
@@ -30,6 +30,7 @@ const createMatchRequest = async (req, res) => {
     const request = await partnerMatchingService.createMatchRequest({
       senderUserId: req.user.id,
       receiverMemberId,
+      bookingId,
     });
 
     return res.status(201).json({

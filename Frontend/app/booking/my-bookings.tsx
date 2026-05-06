@@ -128,7 +128,16 @@ export default function MyBookings() {
                     </div>
                 </div>
                 {showCancel && item.bookingId && (
-                    <div className="mt-3">
+                    <div className="mt-3 d-flex gap-2">
+                        <Button
+                            variant="outline-primary"
+                            size="sm"
+                            onClick={() =>
+                                navigate(`/find-partners?bookingId=${item.bookingId}`)
+                            }
+                        >
+                            Invite Partner
+                        </Button>
                         <Button
                             variant="outline-danger"
                             size="sm"

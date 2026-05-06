@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router";
+import { Link, useSearchParams } from "react-router";
 import {
   partnerMatchingService,
   type PartnerItem,
@@ -7,6 +7,11 @@ import {
 import "./partner-matching.css";
 
 export default function FindPartners() {
+  const [searchParams] = useSearchParams();
+  const bookingIdParam = searchParams.get("bookingId");
+  const inviteBookingId = bookingIdParam ? Number(bookingIdParam) : undefined;
+  const isInviteMode = Boolean(inviteBookingId);
+
   const [partners, setPartners] = useState<PartnerItem[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedSport, setSelectedSport] = useState("All");
@@ -33,7 +38,7 @@ export default function FindPartners() {
 
   const getPartnerName = (partner: PartnerItem) => {
     const fullName = `${partner.first_name ?? ""} ${
-      partner.last_name ?? ""
+        partner.last_name ?? ""
     }`.trim();
 
     return fullName || partner.email || `Member #${partner.member_id}`;
@@ -58,29 +63,29 @@ export default function FindPartners() {
 
   const getBio = (partner: PartnerItem) => {
     return (
-      partner.bio ||
-      `Looking for partners for ${getSport(partner).toLowerCase()}.`
+        partner.bio ||
+        `Looking for partners for ${getSport(partner).toLowerCase()}.`
     );
   };
 
   const sports = useMemo(
-    () => [
-      "All",
-      ...new Set(
-        partners
-          .map((partner) => partner.sport)
-          .filter((sport): sport is string => Boolean(sport))
-      ),
-    ],
-    [partners]
+      () => [
+        "All",
+        ...new Set(
+            partners
+                .map((partner) => partner.sport)
+                .filter((sport): sport is string => Boolean(sport))
+        ),
+      ],
+      [partners]
   );
 
   const skillLevels = useMemo(
-    () => [
-      "All",
-      ...new Set(partners.map((partner) => formatSkillLevel(partner.skill_level))),
-    ],
-    [partners]
+      () => [
+        "All",
+        ...new Set(partners.map((partner) => formatSkillLevel(partner.skill_level))),
+      ],
+      [partners]
   );
 
   const filteredPartners = useMemo(() => {
@@ -93,16 +98,16 @@ export default function FindPartners() {
       const bio = getBio(partner).toLowerCase();
 
       const matchesSport =
-        selectedSport === "All" || getSport(partner) === selectedSport;
+          selectedSport === "All" || getSport(partner) === selectedSport;
 
       const matchesSkill = selectedSkill === "All" || skill === selectedSkill;
 
       const matchesSearch =
-        !query ||
-        name.includes(query) ||
-        sport.includes(query) ||
-        skill.toLowerCase().includes(query) ||
-        bio.includes(query);
+          !query ||
+          name.includes(query) ||
+          sport.includes(query) ||
+          skill.toLowerCase().includes(query) ||
+          bio.includes(query);
 
       return matchesSport && matchesSkill && matchesSearch;
     });
@@ -112,9 +117,15 @@ export default function FindPartners() {
     try {
       setSendingMemberId(partner.member_id);
 
-      await partnerMatchingService.createMatchRequest(partner.member_id);
+      await partnerMatchingService.createMatchRequest(
+          partner.member_id,
+          inviteBookingId
+      );
 
-      alert(`Match request sent to ${getPartnerName(partner)}`);
+      const successText = isInviteMode
+          ? `Invite sent to ${getPartnerName(partner)}. They'll join your booking once they accept.`
+          : `Match request sent to ${getPartnerName(partner)}`;
+      alert(successText);
     } catch (error) {
       console.error(error);
       alert("Failed to send match request. Please make sure you are logged in.");
@@ -124,113 +135,130 @@ export default function FindPartners() {
   };
 
   return (
-    <main className="partner-matching-page">
-      <div className="partner-matching-page-header">
-        <h1>Find Partners</h1>
-        <p>Browse and connect with members looking for sports partners</p>
-      </div>
-
-      <div className="partner-matching-toolbar">
-        <div className="partner-matching-filter-row">
-          <input
-            className="partner-matching-search"
-            placeholder="Search partners"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
-
-          <select
-            className="partner-matching-select"
-            value={selectedSport}
-            onChange={(e) => setSelectedSport(e.target.value)}
-          >
-            {sports.map((sport) => (
-              <option key={sport} value={sport}>
-                {sport}
-              </option>
-            ))}
-          </select>
-
-          <select
-            className="partner-matching-select"
-            value={selectedSkill}
-            onChange={(e) => setSelectedSkill(e.target.value)}
-          >
-            {skillLevels.map((skill) => (
-              <option key={skill} value={skill}>
-                {skill}
-              </option>
-            ))}
-          </select>
+      <main className="partner-matching-page">
+        <div className="partner-matching-page-header">
+          <h1>Find Partners</h1>
+          <p>Browse and connect with members looking for sports partners</p>
         </div>
-      </div>
 
-      {loading ? (
-        <p className="partner-empty-state">Loading partners...</p>
-      ) : (
-        <>
-          <div className="partner-matching-list">
-            {filteredPartners.map((partner) => (
-              <div key={partner.member_id} className="partner-card">
-                <h3>{getPartnerName(partner)}</h3>
-                <p>{getBio(partner)}</p>
+        {isInviteMode && (
+            <div
+                style={{
+                  background: "#e7f3ff",
+                  border: "1px solid #b6daff",
+                  padding: "12px 16px",
+                  borderRadius: "6px",
+                  margin: "0 0 16px 0",
+                }}
+            >
+              <strong>Invite mode:</strong> Selected members will be invited to join
+              your booking. They'll be added to the booking once they accept.
+            </div>
+        )}
 
-                <div className="partner-card-tags">
-                  <span className="partner-card-tag">{getSport(partner)}</span>
-                  <span className="partner-card-tag">
+        <div className="partner-matching-toolbar">
+          <div className="partner-matching-filter-row">
+            <input
+                className="partner-matching-search"
+                placeholder="Search partners"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+            />
+
+            <select
+                className="partner-matching-select"
+                value={selectedSport}
+                onChange={(e) => setSelectedSport(e.target.value)}
+            >
+              {sports.map((sport) => (
+                  <option key={sport} value={sport}>
+                    {sport}
+                  </option>
+              ))}
+            </select>
+
+            <select
+                className="partner-matching-select"
+                value={selectedSkill}
+                onChange={(e) => setSelectedSkill(e.target.value)}
+            >
+              {skillLevels.map((skill) => (
+                  <option key={skill} value={skill}>
+                    {skill}
+                  </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {loading ? (
+            <p className="partner-empty-state">Loading partners...</p>
+        ) : (
+            <>
+              <div className="partner-matching-list">
+                {filteredPartners.map((partner) => (
+                    <div key={partner.member_id} className="partner-card">
+                      <h3>{getPartnerName(partner)}</h3>
+                      <p>{getBio(partner)}</p>
+
+                      <div className="partner-card-tags">
+                        <span className="partner-card-tag">{getSport(partner)}</span>
+                        <span className="partner-card-tag">
                     {formatSkillLevel(partner.skill_level)}
                   </span>
-                  <span className="partner-card-tag">
+                        <span className="partner-card-tag">
                     {getAvailability(partner)}
                   </span>
-                  <span className="partner-card-tag">
+                        <span className="partner-card-tag">
                     {getPreferredTime(partner)}
                   </span>
-                </div>
+                      </div>
 
-                <p>
-                  <strong>Sport:</strong> {getSport(partner)}
-                </p>
-                <p>
-                  <strong>Skill Level:</strong>{" "}
-                  {formatSkillLevel(partner.skill_level)}
-                </p>
-                <p>
-                  <strong>Availability:</strong> {getAvailability(partner)}
-                </p>
-                <p>
-                  <strong>Preferred Time:</strong> {getPreferredTime(partner)}
-                </p>
+                      <p>
+                        <strong>Sport:</strong> {getSport(partner)}
+                      </p>
+                      <p>
+                        <strong>Skill Level:</strong>{" "}
+                        {formatSkillLevel(partner.skill_level)}
+                      </p>
+                      <p>
+                        <strong>Availability:</strong> {getAvailability(partner)}
+                      </p>
+                      <p>
+                        <strong>Preferred Time:</strong> {getPreferredTime(partner)}
+                      </p>
 
-                <div className="partner-card-actions">
-                  <button
-                    className="partner-primary-btn"
-                    onClick={() => void handleSendMatchRequest(partner)}
-                    disabled={sendingMemberId === partner.member_id}
-                  >
-                    {sendingMemberId === partner.member_id
-                      ? "Sending..."
-                      : "Send Match Request"}
-                  </button>
+                      <div className="partner-card-actions">
+                        <button
+                            className="partner-primary-btn"
+                            onClick={() => void handleSendMatchRequest(partner)}
+                            disabled={sendingMemberId === partner.member_id}
+                        >
+                          {sendingMemberId === partner.member_id
+                              ? "Sending..."
+                              : isInviteMode
+                                  ? "Invite to Booking"
+                                  : "Send Match Request"}
+                        </button>
 
-                  <Link
-                    to={`/find-partners/${partner.member_id}`}
-                    className="partner-secondary-btn"
-                  >
-                    View Profile
-                  </Link>
-                </div>
+                        <Link
+                            to={`/find-partners/${partner.member_id}`}
+                            className="partner-secondary-btn"
+                        >
+                          View Profile
+                        </Link>
+                      </div>
+                    </div>
+                ))}
               </div>
-            ))}
-          </div>
 
-          {filteredPartners.length === 0 ? (
-            <p className="partner-empty-state">
-              No partners matched your search or filters.
-            </p>
-          ) : null}
-        </>
-      )}
-    </main>
+              {filteredPartners.length === 0 ? (
+                  <p className="partner-empty-state">
+                    No partners matched your search or filters.
+                  </p>
+              ) : null}
+            </>
+        )}
+      </main>
   );
 }

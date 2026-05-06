@@ -28,6 +28,12 @@ export interface IncomingPartnerRequestItem {
   first_name?: string | null;
   last_name?: string | null;
   email?: string | null;
+  booking_id?: number | null;
+  booking_date?: string | null;
+  booking_start_time?: string | null;
+  booking_end_time?: string | null;
+  intended_activity?: string | null;
+  facility_name?: string | null;
 }
 
 export interface IncomingPartnerRequestResponse {
@@ -38,32 +44,33 @@ export interface IncomingPartnerRequestResponse {
 export const partnerMatchingService = {
   getPartners: async () => {
     const { data } = await api.get<PartnersResponse>(
-      "/partner-matching/partners"
+        "/partner-matching/partners"
     );
     return data;
   },
 
-  createMatchRequest: async (receiverMemberId: number) => {
+  createMatchRequest: async (receiverMemberId: number, bookingId?: number) => {
     const { data } = await api.post("/partner-matching/requests", {
       receiverMemberId,
+      ...(bookingId ? { bookingId } : {}),
     });
     return data;
   },
 
   getIncomingRequests: async () => {
     const { data } = await api.get<IncomingPartnerRequestResponse>(
-      "/partner-matching/requests/incoming"
+        "/partner-matching/requests/incoming"
     );
     return data;
   },
 
   updateRequestStatus: async (
-    requestId: number,
-    status: "accepted" | "rejected"
+      requestId: number,
+      status: "accepted" | "rejected"
   ) => {
     const { data } = await api.patch(
-      `/partner-matching/requests/${requestId}/status`,
-      { status }
+        `/partner-matching/requests/${requestId}/status`,
+        { status }
     );
     return data;
   },
