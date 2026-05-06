@@ -48,7 +48,9 @@ const getFacilityCards = async () => {
         usage_guideline,
         image_url,
         max_people,
-        max_duration_minutes
+        max_duration_minutes,
+        latitude,
+        longitude
       FROM public.facilities
       ORDER BY facility_id ASC
     `,
@@ -76,6 +78,8 @@ const getFacilityCards = async () => {
       maxDurationMinutes: facility.max_duration_minutes ?? null,
       availableTime,
       otherAvailableTimes,
+      latitude: facility.latitude != null ? parseFloat(facility.latitude) : null,
+      longitude: facility.longitude != null ? parseFloat(facility.longitude) : null,
     };
   });
 };

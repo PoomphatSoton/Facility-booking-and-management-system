@@ -54,6 +54,9 @@ export default function AppNavbar() {
                 <Nav.Link as={Link} to="/">
                   Home
                 </Nav.Link>
+                <Nav.Link as={Link} to="/facilities/map">
+                  Facilities Map
+                </Nav.Link>
                 <Nav.Link as={Link} to="/booking/my">
                   My Bookings
                 </Nav.Link>
