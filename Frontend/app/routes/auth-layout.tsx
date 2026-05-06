@@ -1,9 +1,5 @@
-import { Outlet } from "react-router";
+import { GuestGuard } from "~/auth/guard";
 
 export default function AuthLayout() {
-  return (
-    <div>
-        <Outlet />
-    </div>
-  );
+  return <GuestGuard />;
 }

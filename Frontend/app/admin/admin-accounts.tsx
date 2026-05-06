@@ -7,6 +7,7 @@ import type { ApiError } from "~/services/types";
 type FormState = {
   email: string;
   password: string;
+  confirmPassword: string;
   firstName: string;
   lastName: string;
 };
@@ -16,6 +17,7 @@ const ROOT_ADMIN_EMAIL = "admin@sport.com";
 const emptyForm = (): FormState => ({
   email: "",
   password: "",
+  confirmPassword: "",
   firstName: "",
   lastName: "",
 });
@@ -58,15 +60,19 @@ export default function AdminAccounts() {
 
   const openEdit = (admin: AdminItem) => {
     setEditTarget(admin);
-    setForm({ email: admin.email, password: "", firstName: admin.firstName, lastName: admin.lastName });
+    setForm({ email: admin.email, password: "", confirmPassword: "", firstName: admin.firstName, lastName: admin.lastName });
     setFormError("");
     setShowModal(true);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSubmitting(true);
     setFormError("");
+    if (!isEdit && form.password !== form.confirmPassword) {
+      setFormError("Passwords do not match.");
+      return;
+    }
+    setSubmitting(true);
     try {
       if (isEdit) {
         const updated = await adminService.update(editTarget.id, {
@@ -185,15 +191,26 @@ export default function AdminAccounts() {
             </Form.Group>
 
             {!isEdit && (
-              <Form.Group>
-                <Form.Label>Password</Form.Label>
-                <Form.Control
-                  type="password"
-                  value={form.password}
-                  onChange={(e) => setForm({ ...form, password: e.target.value })}
-                  required
-                />
-              </Form.Group>
+              <>
+                <Form.Group>
+                  <Form.Label>Password</Form.Label>
+                  <Form.Control
+                    type="password"
+                    value={form.password}
+                    onChange={(e) => setForm({ ...form, password: e.target.value })}
+                    required
+                  />
+                </Form.Group>
+                <Form.Group>
+                  <Form.Label>Confirm Password</Form.Label>
+                  <Form.Control
+                    type="password"
+                    value={form.confirmPassword}
+                    onChange={(e) => setForm({ ...form, confirmPassword: e.target.value })}
+                    required
+                  />
+                </Form.Group>
+              </>
             )}
 
             <Form.Group>
