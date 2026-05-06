@@ -140,6 +140,29 @@ const initDb = async () => {
       sport_preferred VARCHAR(100) NOT NULL
     )
   `);
+  await pool.query(`
+  CREATE TABLE IF NOT EXISTS public.partner_profiles (
+    partner_profile_id SERIAL PRIMARY KEY,
+    member_id INTEGER NOT NULL UNIQUE REFERENCES public.members(member_id) ON DELETE CASCADE,
+    bio TEXT,
+    availability TEXT,
+    preferred_time TEXT,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+  )
+`);
+
+await pool.query(`
+  CREATE TABLE IF NOT EXISTS public.partner_profile_sports (
+    partner_profile_sport_id SERIAL PRIMARY KEY,
+    partner_profile_id INTEGER NOT NULL REFERENCES public.partner_profiles(partner_profile_id) ON DELETE CASCADE,
+    sport VARCHAR(100) NOT NULL,
+    skill_level TEXT NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    CONSTRAINT partner_profile_sports_skill_level_check
+      CHECK (skill_level IN ('beginner', 'intermediate', 'advanced'))
+  )
+`);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS public.facilities (

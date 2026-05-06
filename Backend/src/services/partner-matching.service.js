@@ -29,30 +29,29 @@ const getPartners = async ({ userId }) => {
         u.first_name,
         u.last_name,
         u.email,
-        COALESCE(ms.sport, msp.sport_preferred, 'Not specified') AS sport,
-        COALESCE(ms.skill_level, 'Not specified') AS skill_level,
-        'Not specified' AS availability,
-        'Not specified' AS preferred_time,
-        '' AS bio
-      FROM public.members m
-      JOIN public.users u ON m.user_id = u.id
+        COALESCE(pps.sport, 'Not specified') AS sport,
+        COALESCE(pps.skill_level, 'Not specified') AS skill_level,
+        COALESCE(pp.availability, 'Not specified') AS availability,
+        COALESCE(pp.preferred_time, 'Not specified') AS preferred_time,
+        COALESCE(pp.bio, '') AS bio
+      FROM public.partner_profiles pp
+      JOIN public.members m
+        ON pp.member_id = m.member_id
+      JOIN public.users u
+        ON m.user_id = u.id
       LEFT JOIN LATERAL (
-        SELECT sport, skill_level
-        FROM public.member_skills
-        WHERE member_id = m.member_id
-        ORDER BY member_skill_id
+        SELECT
+          sport,
+          skill_level
+        FROM public.partner_profile_sports
+        WHERE partner_profile_id = pp.partner_profile_id
+        ORDER BY partner_profile_sport_id ASC
         LIMIT 1
-      ) ms ON true
-      LEFT JOIN LATERAL (
-        SELECT sport_preferred
-        FROM public.member_sport_preferences
-        WHERE member_id = m.member_id
-        ORDER BY member_sport_preference_id
-        LIMIT 1
-      ) msp ON true
+      ) pps ON true
       WHERE m.member_id <> $1
         AND u.role = 'member'
-      ORDER BY u.first_name, u.last_name
+        AND pp.is_active = TRUE
+      ORDER BY u.first_name ASC, u.last_name ASC
     `,
     [currentMemberId]
   );
@@ -65,9 +64,16 @@ const createMatchRequest = async ({ senderUserId, receiverMemberId }) => {
 
   const result = await pool.query(
     `
-      INSERT INTO public.matching_requests (sender_id, receiver_id, status)
-      VALUES ($1, $2, 'pending')
-      RETURNING request_matching_id, sender_id, receiver_id, status, created_at
+      INSERT INTO public.matching_requests
+        (sender_id, receiver_id, status)
+      VALUES
+        ($1, $2, 'pending')
+      RETURNING
+        request_matching_id,
+        sender_id,
+        receiver_id,
+        status,
+        created_at
     `,
     [senderMemberId, receiverMemberId]
   );
@@ -85,12 +91,15 @@ const getIncomingRequests = async ({ userId }) => {
         mr.status,
         mr.created_at,
         sender.user_id AS sender_user_id,
+        sender.member_id AS sender_member_id,
         u.first_name,
         u.last_name,
         u.email
       FROM public.matching_requests mr
-      JOIN public.members sender ON mr.sender_id = sender.member_id
-      JOIN public.users u ON sender.user_id = u.id
+      JOIN public.members sender
+        ON mr.sender_id = sender.member_id
+      JOIN public.users u
+        ON sender.user_id = u.id
       WHERE mr.receiver_id = $1
       ORDER BY mr.created_at DESC
     `,
@@ -115,7 +124,12 @@ const updateRequestStatus = async ({ userId, requestId, status }) => {
       SET status = $1
       WHERE request_matching_id = $2
         AND receiver_id = $3
-      RETURNING request_matching_id, sender_id, receiver_id, status, created_at
+      RETURNING
+        request_matching_id,
+        sender_id,
+        receiver_id,
+        status,
+        created_at
     `,
     [status, requestId, receiverMemberId]
   );
