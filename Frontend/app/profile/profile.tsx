@@ -1,7 +1,12 @@
 import { useEffect, useState } from "react";
 import { Alert, Button, Form, Modal, Spinner } from "react-bootstrap";
+import { Link } from "react-router";
 import { useAuth } from "~/auth/auth-middleware";
 import { profileService } from "~/services/profile.service";
+import {
+  partnerMatchingService,
+  type MyPartnerProfile,
+} from "~/services/partner-matching.service";
 import type { ApiError, User } from "~/services/types";
 import profileIcon from "~/image/profile.png";
 import "./profile.css";
@@ -34,6 +39,10 @@ export default function Profile() {
   const [profile, setProfile] = useState<User | null>(null);
   const [loadingProfile, setLoadingProfile] = useState(true);
   const [profileLoadError, setProfileLoadError] = useState("");
+
+  const [partnerProfile, setPartnerProfile] = useState<MyPartnerProfile | null>(null);
+  const [loadingPartnerProfile, setLoadingPartnerProfile] = useState(false);
+  const [partnerProfileLoadError, setPartnerProfileLoadError] = useState("");
 
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -77,6 +86,23 @@ export default function Profile() {
     };
     void load();
   }, []);
+
+  useEffect(() => {
+    if (profile?.role !== "member") return;
+    const loadPartnerProfile = async () => {
+      setLoadingPartnerProfile(true);
+      setPartnerProfileLoadError("");
+      try {
+        const result = await partnerMatchingService.getMyProfile();
+        setPartnerProfile(result.data);
+      } catch {
+        setPartnerProfileLoadError("Failed to load partner profile.");
+      } finally {
+        setLoadingPartnerProfile(false);
+      }
+    };
+    void loadPartnerProfile();
+  }, [profile?.role]);
 
   const passwordMismatch =
     passwordForm.confirmPassword.length > 0 &&
@@ -151,8 +177,6 @@ export default function Profile() {
       setIsChangingPassword(false);
     }
   };
-
-  const isStaffOrAdmin = profile?.role === "staff" || profile?.role === "admin";
 
   if (loadingProfile) {
     return (
@@ -303,61 +327,88 @@ export default function Profile() {
             </Form>
           </div>
 
-          {/* Account Details — read-only */}
-          <div className="profile-card" style={{ marginTop: "1.5rem" }}>
-            <div className="profile-card-header">
-              <h2 className="profile-card-title">Account Details</h2>
-            </div>
-
-            <div className="profile-fields-grid">
-              <div className="profile-field">
-                <label className="profile-label">Role</label>
-                <p className="profile-value">{profile?.role || "—"}</p>
+          {/* Partner Matching Profile — members only */}
+          {profile?.role === "member" && (
+            <div className="profile-card" style={{ marginTop: "1.5rem" }}>
+              <div className="profile-card-header">
+                <h2 className="profile-card-title">Partner Matching Profile</h2>
+                {partnerProfile && (
+                  <Button as={Link} to="/my-partner-profile" variant="outline-primary" size="sm">
+                    Edit Partner Profile
+                  </Button>
+                )}
               </div>
 
-              <div className="profile-field">
-                <label className="profile-label">Account Status</label>
-                <p className="profile-value">{profile?.accountStatus || "—"}</p>
-              </div>
-
-              {/* Staff / Admin */}
-              {isStaffOrAdmin && (
-                <div className="profile-field">
-                  <label className="profile-label">Staff ID</label>
-                  <p className="profile-value">
-                    {profile?.staffId != null ? String(profile.staffId) : "—"}
-                  </p>
+              {loadingPartnerProfile ? (
+                <div className="d-flex justify-content-center py-3">
+                  <Spinner animation="border" size="sm" />
                 </div>
-              )}
-
-              {/* Member */}
-              {profile?.role === "member" && (
-                <>
+              ) : partnerProfileLoadError ? (
+                <Alert variant="danger" className="mb-0">{partnerProfileLoadError}</Alert>
+              ) : partnerProfile ? (
+                <div className="profile-fields-grid">
                   <div className="profile-field">
-                    <label className="profile-label">Member ID</label>
+                    <label className="profile-label">Preferred Sport</label>
+                    <p className="profile-value">{fmt(partnerProfile.sport)}</p>
+                  </div>
+
+                  <div className="profile-field">
+                    <label className="profile-label">Skill Level</label>
                     <p className="profile-value">
-                      {profile.memberId != null ? String(profile.memberId) : "—"}
+                      {partnerProfile.skill_level
+                        ? partnerProfile.skill_level.charAt(0).toUpperCase() + partnerProfile.skill_level.slice(1)
+                        : "—"}
                     </p>
                   </div>
 
                   <div className="profile-field">
-                    <label className="profile-label">Member Status</label>
-                    <p className="profile-value">{profile.memberStatus || "—"}</p>
+                    <label className="profile-label">Availability</label>
+                    <p className="profile-value">{fmt(partnerProfile.availability)}</p>
                   </div>
 
                   <div className="profile-field">
-                    <label className="profile-label">Membership Start</label>
-                    <p className="profile-value">{fmtDate(profile.membershipStart)}</p>
+                    <label className="profile-label">Preferred Time</label>
+                    <p className="profile-value">{fmt(partnerProfile.preferred_time)}</p>
                   </div>
 
-                  <div className="profile-field">
-                    <label className="profile-label">Membership Expiry</label>
-                    <p className="profile-value">{fmtDate(profile.membershipExp)}</p>
+                  {partnerProfile.bio && (
+                    <div className="profile-field profile-field--full">
+                      <label className="profile-label">Bio</label>
+                      <p className="profile-value">{partnerProfile.bio}</p>
+                    </div>
+                  )}
+
+                  <div className="profile-field profile-field--full">
+                    <label className="profile-label">Status</label>
+                    <p className="profile-value">
+                      <span
+                        style={{
+                          display: "inline-block",
+                          fontSize: "0.82rem",
+                          fontWeight: 600,
+                          borderRadius: "999px",
+                          padding: "0.25rem 0.75rem",
+                          background: "#dcfce7",
+                          color: "#166534",
+                        }}
+                      >
+                        Active — visible to other members
+                      </span>
+                    </p>
                   </div>
-                </>
+                </div>
+              ) : (
+                <div style={{ padding: "0.5rem 0" }}>
+                  <p className="profile-value profile-value--muted" style={{ marginBottom: "1rem" }}>
+                    You have not created a partner matching profile yet.
+                  </p>
+                  <Button as={Link} to="/my-partner-profile" variant="primary" size="sm">
+                    Create Partner Profile
+                  </Button>
+                </div>
               )}
             </div>
-          </div>
+          )}
         </main>
       </div>
 

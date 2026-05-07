@@ -7,6 +7,7 @@ export default [
     route("equipment-reports", "equipment-report/equipment-report-list.tsx"),
     route("find-partners", "partner-matching/find-partners.tsx"),
     route("partner-requests", "partner-matching/partner-requests.tsx"),
+    route("my-partner-profile", "partner-matching/my-partner-profile.tsx"),
     route("find-partners/:partnerId", "partner-matching/partner-profile.tsx"),
     route("booking/new/:facilityId", "booking/new-booking.tsx"),
     route("booking/my", "booking/my-bookings.tsx"),

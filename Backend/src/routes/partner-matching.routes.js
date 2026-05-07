@@ -28,4 +28,16 @@ router.patch(
   partnerMatchingController.updateRequestStatus
 );
 
+router.get(
+  '/profile',
+  authMiddleware.requireAuth,
+  partnerMatchingController.getMyProfile
+);
+
+router.put(
+  '/profile',
+  authMiddleware.requireAuth,
+  partnerMatchingController.upsertMyProfile
+);
+
 module.exports = router;

@@ -157,9 +157,109 @@ const updateRequestStatus = async ({ userId, requestId, status }) => {
   return result.rows[0];
 };
 
+const getMyProfile = async ({ userId }) => {
+  const memberId = await getMemberIdByUserId(userId);
+
+  const profileResult = await pool.query(
+    `SELECT partner_profile_id, bio, availability, preferred_time, is_active, created_at
+     FROM public.partner_profiles
+     WHERE member_id = $1
+     LIMIT 1`,
+    [memberId]
+  );
+
+  if (!profileResult.rows[0]) {
+    return null;
+  }
+
+  const profile = profileResult.rows[0];
+
+  const sportResult = await pool.query(
+    `SELECT sport, skill_level
+     FROM public.partner_profile_sports
+     WHERE partner_profile_id = $1
+     ORDER BY partner_profile_sport_id ASC
+     LIMIT 1`,
+    [profile.partner_profile_id]
+  );
+
+  const sportRow = sportResult.rows[0] ?? null;
+
+  return {
+    partner_profile_id: profile.partner_profile_id,
+    bio: profile.bio,
+    availability: profile.availability,
+    preferred_time: profile.preferred_time,
+    is_active: profile.is_active,
+    created_at: profile.created_at,
+    sport: sportRow?.sport ?? null,
+    skill_level: sportRow?.skill_level ?? null,
+  };
+};
+
+const upsertMyProfile = async ({ userId, bio, sport, skillLevel, availability, preferredTime }) => {
+  const validSkillLevels = ['beginner', 'intermediate', 'advanced'];
+  if (!sport || !sport.trim()) throw new Error('SPORT_REQUIRED');
+  if (!validSkillLevels.includes(skillLevel)) throw new Error('INVALID_SKILL_LEVEL');
+  if (!availability || !availability.trim()) throw new Error('AVAILABILITY_REQUIRED');
+  if (!preferredTime || !preferredTime.trim()) throw new Error('PREFERRED_TIME_REQUIRED');
+
+  const memberId = await getMemberIdByUserId(userId);
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const profileResult = await client.query(
+      `INSERT INTO public.partner_profiles (member_id, bio, availability, preferred_time, is_active)
+       VALUES ($1, $2, $3, $4, TRUE)
+       ON CONFLICT (member_id) DO UPDATE
+       SET bio = EXCLUDED.bio,
+           availability = EXCLUDED.availability,
+           preferred_time = EXCLUDED.preferred_time,
+           is_active = TRUE
+       RETURNING partner_profile_id, bio, availability, preferred_time, is_active, created_at`,
+      [memberId, bio?.trim() || null, availability.trim(), preferredTime.trim()]
+    );
+
+    const profileId = profileResult.rows[0].partner_profile_id;
+
+    await client.query(
+      `DELETE FROM public.partner_profile_sports WHERE partner_profile_id = $1`,
+      [profileId]
+    );
+
+    await client.query(
+      `INSERT INTO public.partner_profile_sports (partner_profile_id, sport, skill_level)
+       VALUES ($1, $2, $3)`,
+      [profileId, sport.trim(), skillLevel]
+    );
+
+    await client.query('COMMIT');
+
+    return {
+      partner_profile_id: profileId,
+      bio: profileResult.rows[0].bio,
+      availability: profileResult.rows[0].availability,
+      preferred_time: profileResult.rows[0].preferred_time,
+      is_active: profileResult.rows[0].is_active,
+      created_at: profileResult.rows[0].created_at,
+      sport: sport.trim(),
+      skill_level: skillLevel,
+    };
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+};
+
 module.exports = {
   getPartners,
   createMatchRequest,
   getIncomingRequests,
   updateRequestStatus,
+  getMyProfile,
+  upsertMyProfile,
 };

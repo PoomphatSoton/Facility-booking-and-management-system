@@ -61,6 +61,10 @@ export default function AppNavbar() {
                   My Bookings
                 </Nav.Link>
 
+                <Nav.Link as={Link} to="/my-partner-profile">
+                  My Partner Profile
+                </Nav.Link>
+
                 <Nav.Link as={Link} to="/find-partners">
                   Find Partners
                 </Nav.Link>

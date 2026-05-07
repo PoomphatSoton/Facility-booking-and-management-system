@@ -1,6 +1,7 @@
 import { api } from "./http";
 
 export type PartnerRequestStatus = "pending" | "accepted" | "rejected";
+export type SkillLevel = "beginner" | "intermediate" | "advanced";
 
 export interface PartnerItem {
   member_id: number;
@@ -42,6 +43,30 @@ export interface IncomingPartnerRequestResponse {
   data: IncomingPartnerRequestItem[];
 }
 
+export interface MyPartnerProfile {
+  partner_profile_id: number;
+  bio: string | null;
+  availability: string;
+  preferred_time: string;
+  sport: string | null;
+  skill_level: SkillLevel | null;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface MyPartnerProfileResponse {
+  message: string;
+  data: MyPartnerProfile | null;
+}
+
+export interface SaveMyProfilePayload {
+  bio?: string;
+  sport: string;
+  skillLevel: SkillLevel;
+  availability: string;
+  preferredTime: string;
+}
+
 export const partnerMatchingService = {
   getPartners: async () => {
     const { data } = await api.get<PartnersResponse>(
@@ -71,6 +96,21 @@ export const partnerMatchingService = {
     const { data } = await api.patch(
       `/partner-matching/requests/${requestId}/status`,
       { status }
+    );
+    return data;
+  },
+
+  getMyProfile: async () => {
+    const { data } = await api.get<MyPartnerProfileResponse>(
+      "/partner-matching/profile"
+    );
+    return data;
+  },
+
+  saveMyProfile: async (payload: SaveMyProfilePayload) => {
+    const { data } = await api.put<MyPartnerProfileResponse>(
+      "/partner-matching/profile",
+      payload
     );
     return data;
   },
