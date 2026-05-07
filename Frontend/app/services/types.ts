@@ -16,11 +16,20 @@ export type UserRole = "admin" | "member" | "staff";
 export interface User {
   id: string;
   email: string;
-  firstName: string;
-  lastName: string;
-  dateOfBirth: string;
-  address: string;
+  firstName: string | null;
+  lastName: string | null;
+  dateOfBirth: string | null;
+  address: string | null;
   role: UserRole;
+  accountStatus?: string | null;
+  // Member-specific (populated by GET /profile when role === 'member')
+  memberId?: number | null;
+  memberStatus?: string | null;
+  membershipStart?: string | null;
+  membershipExp?: string | null;
+  profileImgUrl?: string | null;
+  // Staff-specific (populated by GET /profile when role === 'staff' | 'admin')
+  staffId?: number | null;
 }
 
 export interface RegisterCredentialsRequest {
