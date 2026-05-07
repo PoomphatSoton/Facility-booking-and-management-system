@@ -44,6 +44,16 @@ app.get('/health', (req, res) => {
   res.status(200).json({ status: 'ok' });
 });
 
+app.get('/init-db', async (req, res) => {
+  try {
+    await initDb();
+    await seedRootAdmin();
+    res.status(200).json({ status: 'ok', message: 'DB initialized' });
+  } catch (error) {
+    res.status(500).json({ status: 'error', message: error.message });
+  }
+});
+
 app.use('/api', apiRoutes);
 
 // Vercel: export app (serverless)
