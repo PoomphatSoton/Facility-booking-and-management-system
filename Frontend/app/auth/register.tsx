@@ -55,10 +55,13 @@ export default function Register() {
     if (session.isPendingStep3) return setStep(3);
     if (session.isLoggedIn) return navigate("/");
 
-    const fbUser = firebaseAuth.currentUser;
-    if (fbUser && !fbUser.emailVerified) {
-      setEmail(fbUser.email ?? "");
-      setStep(2);
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("verify") === "true") {
+      const fbUser = firebaseAuth.currentUser;
+      if (fbUser && !fbUser.emailVerified) {
+        setEmail(fbUser.email ?? "");
+        setStep(2);
+      }
     }
   };
 

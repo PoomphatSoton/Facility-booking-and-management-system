@@ -51,7 +51,7 @@ export default function Login() {
       const anyError = error as { code?: string; message?: string };
 
       if (anyError.code === "email-not-verified") {
-        navigate("/auth/register");
+        navigate("/auth/register?verify=true");
       } else if (anyError.code?.startsWith("auth/")) {
         setErrorMessage("Email or password is incorrect");
       } else {
