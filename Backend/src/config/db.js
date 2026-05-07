@@ -75,12 +75,6 @@ const initDb = async () => {
   `);
 
   await pool.query(`
-    ALTER TABLE public.pending_registrations
-    ALTER COLUMN password_hash DROP NOT NULL,
-    ADD COLUMN IF NOT EXISTS firebase_uid TEXT
-  `);
-
-  await pool.query(`
     CREATE TABLE IF NOT EXISTS public.pending_registrations (
       registration_id TEXT PRIMARY KEY,
       email TEXT NOT NULL UNIQUE,
@@ -90,6 +84,12 @@ const initDb = async () => {
       otp_verified BOOLEAN NOT NULL DEFAULT FALSE,
       created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
     )
+  `);
+
+  await pool.query(`
+    ALTER TABLE public.pending_registrations
+    ALTER COLUMN password_hash DROP NOT NULL,
+    ADD COLUMN IF NOT EXISTS firebase_uid TEXT
   `);
 
   await pool.query(`
