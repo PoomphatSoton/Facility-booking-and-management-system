@@ -7,6 +7,7 @@ import type { User } from "~/services/types";
 const AuthContext = createContext<{
   user: User | null;
   loading: boolean;
+  setUser: React.Dispatch<React.SetStateAction<User | null>>;
 } | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -17,7 +18,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const unsubscribe = onAuthStateChanged(
       firebaseAuth,
       async (firebaseUser: FirebaseUser | null) => {
-        if (!firebaseUser || !firebaseUser.emailVerified) {
+        setLoading(true);
+        if (!firebaseUser) {
           setUser(null);
           setLoading(false);
           return;
@@ -27,6 +29,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           await firebaseUser.getIdToken(true);
 
           const { data } = await api.get<{ user: User }>("/auth/me");
+
+          if (data.user.role === "member" && !firebaseUser.emailVerified) {
+            setUser(null);
+            return;
+          }
+
           setUser(data.user);
         } catch {
           setUser(null);
@@ -40,7 +48,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, loading }}>
+    <AuthContext.Provider value={{ user, loading, setUser }}>
       {children}
     </AuthContext.Provider>
   );

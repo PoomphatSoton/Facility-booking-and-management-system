@@ -140,6 +140,29 @@ const initDb = async () => {
       sport_preferred VARCHAR(100) NOT NULL
     )
   `);
+  await pool.query(`
+  CREATE TABLE IF NOT EXISTS public.partner_profiles (
+    partner_profile_id SERIAL PRIMARY KEY,
+    member_id INTEGER NOT NULL UNIQUE REFERENCES public.members(member_id) ON DELETE CASCADE,
+    bio TEXT,
+    availability TEXT,
+    preferred_time TEXT,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+  )
+`);
+
+await pool.query(`
+  CREATE TABLE IF NOT EXISTS public.partner_profile_sports (
+    partner_profile_sport_id SERIAL PRIMARY KEY,
+    partner_profile_id INTEGER NOT NULL REFERENCES public.partner_profiles(partner_profile_id) ON DELETE CASCADE,
+    sport VARCHAR(100) NOT NULL,
+    skill_level TEXT NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    CONSTRAINT partner_profile_sports_skill_level_check
+      CHECK (skill_level IN ('beginner', 'intermediate', 'advanced'))
+  )
+`);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS public.facilities (
@@ -160,6 +183,28 @@ const initDb = async () => {
   await pool.query(`
     ALTER TABLE public.facilities
     ADD COLUMN IF NOT EXISTS image_url TEXT
+  `);
+
+  await pool.query(`
+    ALTER TABLE public.facilities
+    ADD COLUMN IF NOT EXISTS max_duration_minutes INTEGER
+  `);
+
+  await pool.query(`
+    ALTER TABLE public.facilities
+    ADD COLUMN IF NOT EXISTS latitude  DECIMAL(10, 7),
+    ADD COLUMN IF NOT EXISTS longitude DECIMAL(10, 7)
+  `);
+
+  // Seed map coordinates for any facility that doesn't have them yet.
+  // Coordinates are spread around the University of Southampton Jubilee Sports Centre
+  // (approx. 50.9346, -1.3947) as realistic placeholder positions.
+  await pool.query(`
+    UPDATE public.facilities
+    SET
+      latitude  = 50.9346 + ((facility_id % 5) - 2) * 0.0004,
+      longitude = -1.3947 + ((facility_id % 3) - 1) * 0.0006
+    WHERE latitude IS NULL
   `);
 
   await pool.query(`
@@ -244,8 +289,19 @@ const initDb = async () => {
       booking_detail_id INTEGER NOT NULL REFERENCES public.booking_details(booking_detail_id) ON DELETE CASCADE,
       request_status TEXT NOT NULL DEFAULT 'pending',
       created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-      CONSTRAINT booking_requests_request_status_check CHECK (request_status IN ('pending', 'approved', 'rejected'))
+      CONSTRAINT booking_requests_request_status_check CHECK (request_status IN ('pending', 'approved', 'rejected', 'cancelled', 'alt_suggested'))
     )
+  `);
+
+  await pool.query(`
+    ALTER TABLE public.booking_requests
+    DROP CONSTRAINT IF EXISTS booking_requests_request_status_check
+  `);
+
+  await pool.query(`
+    ALTER TABLE public.booking_requests
+    ADD CONSTRAINT booking_requests_request_status_check
+    CHECK (request_status IN ('pending', 'approved', 'rejected', 'cancelled', 'alt_suggested'))
   `);
 
   await pool.query(`
@@ -283,6 +339,12 @@ const initDb = async () => {
   ALTER TABLE public.matching_requests
   ADD CONSTRAINT matching_requests_status_check
   CHECK (status IN ('pending', 'accepted', 'rejected'))
+`);
+
+  await pool.query(`
+  ALTER TABLE public.matching_requests
+  ADD COLUMN IF NOT EXISTS booking_request_id INTEGER
+    REFERENCES public.booking_requests(booking_request_id) ON DELETE CASCADE
 `);
 
   await pool.query(`

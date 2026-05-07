@@ -1,60 +1,79 @@
-import { useState } from "react";
-import type { EquipmentReportItem } from "../services/equipment-report.service";
+import { useEffect, useState, type FormEvent } from "react";
+import {
+  equipmentReportService,
+  type EquipmentReportItem,
+} from "../services/equipment-report.service";
+import { facilityService } from "../services/facility.service";
+import type { FacilityCardItem } from "../services/types";
 import "./equipment-report.css";
 
-const mockReports: EquipmentReportItem[] = [
-  {
-    report_id: 1,
-    description: "Badminton racket grip is damaged.",
-    status: "noted",
-    created_at: new Date().toISOString(),
-    facility_id: 1,
-    facility_name: "Badminton Court",
-  },
-  {
-    report_id: 2,
-    description: "Basketball hoop net is broken.",
-    status: "inProgress",
-    created_at: new Date().toISOString(),
-    facility_id: 2,
-    facility_name: "Basketball Court",
-  },
-  {
-    report_id: 3,
-    description: "Treadmill display is not working.",
-    status: "resolved",
-    created_at: new Date().toISOString(),
-    facility_id: 3,
-    facility_name: "Gym Room",
-  },
-];
-
 export default function EquipmentReportList() {
-  const [reports, setReports] = useState<EquipmentReportItem[]>(mockReports);
+  const [reports, setReports] = useState<EquipmentReportItem[]>([]);
+  const [facilities, setFacilities] = useState<FacilityCardItem[]>([]);
   const [facilityId, setFacilityId] = useState("");
   const [description, setDescription] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [loadingFacilities, setLoadingFacilities] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const loadReports = async () => {
+    try {
+      setLoading(true);
+      const response = await equipmentReportService.getMyReports();
+      setReports(response.data);
+    } catch (error) {
+      console.error(error);
+      alert("Failed to load equipment reports");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadFacilities = async () => {
+    try {
+      setLoadingFacilities(true);
+      const response = await facilityService.getFacilityCards();
+      setFacilities(response.data);
+    } catch (error) {
+      console.error(error);
+      alert("Failed to load facilities");
+    } finally {
+      setLoadingFacilities(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadReports();
+    void loadFacilities();
+  }, []);
+
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
 
     if (!facilityId || !description.trim()) {
-      alert("Please enter facility ID and description");
+      alert("Please select a facility and enter a description");
       return;
     }
 
-    const newReport: EquipmentReportItem = {
-      report_id: Date.now(),
-      description: description.trim(),
-      status: "noted",
-      created_at: new Date().toISOString(),
-      facility_id: Number(facilityId),
-      facility_name: `Facility #${facilityId}`,
-    };
+    try {
+      setSubmitting(true);
 
-    setReports((prev) => [newReport, ...prev]);
-    setFacilityId("");
-    setDescription("");
-    alert("Mock report submitted successfully");
+      await equipmentReportService.createReport({
+        facilityId: Number(facilityId),
+        description: description.trim(),
+      });
+
+      setFacilityId("");
+      setDescription("");
+      await loadReports();
+
+      alert("Report submitted successfully");
+    } catch (error) {
+      console.error(error);
+      alert("Failed to submit report");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -69,15 +88,24 @@ export default function EquipmentReportList() {
 
         <form className="equipment-report-form" onSubmit={handleSubmit}>
           <div className="equipment-report-field">
-            <label htmlFor="equipment-facility-id">Facility ID</label>
-            <input
+            <label htmlFor="equipment-facility-id">Facility</label>
+            <select
               id="equipment-facility-id"
               className="equipment-report-input"
-              type="number"
               value={facilityId}
               onChange={(e) => setFacilityId(e.target.value)}
-              placeholder="Enter facility ID"
-            />
+              disabled={loadingFacilities}
+            >
+              <option value="">
+                {loadingFacilities ? "Loading facilities..." : "Select a facility"}
+              </option>
+
+              {facilities.map((facility) => (
+                <option key={facility.facilityId} value={facility.facilityId}>
+                  {facility.name}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div className="equipment-report-field">
@@ -91,8 +119,12 @@ export default function EquipmentReportList() {
             />
           </div>
 
-          <button className="equipment-report-submit" type="submit">
-            Submit Report
+          <button
+            className="equipment-report-submit"
+            type="submit"
+            disabled={submitting || loadingFacilities}
+          >
+            {submitting ? "Submitting..." : "Submit Report"}
           </button>
         </form>
       </section>
@@ -100,7 +132,9 @@ export default function EquipmentReportList() {
       <section className="equipment-report-section">
         <h2>My Reports</h2>
 
-        {reports.length === 0 ? (
+        {loading ? (
+          <p className="equipment-report-empty">Loading reports...</p>
+        ) : reports.length === 0 ? (
           <p className="equipment-report-empty">No equipment reports yet.</p>
         ) : (
           <div className="equipment-report-list">

@@ -6,89 +6,97 @@ const { pool } = require('../config/db');
  * @param {number} daysAhead - 7
  * @returns {Array} slotDate, startTime, endTime, available
  */
-const getAvailableSlots = async (facilityId, daysAhead = 30) => {
-    // 1. First verify that the venue exists and retrieve max_people at the same time
+const DAY_NAMES = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+
+const getDayOfWeek = (dateStr) => {
+    const [y, m, d] = dateStr.split('-').map(Number);
+    return DAY_NAMES[new Date(y, m - 1, d).getDay()];
+};
+
+const toMinutes = (t) => {
+    const [h, m] = t.split(':').map(Number);
+    return h * 60 + m;
+};
+
+const padTime = (minutes) => {
+    const h = Math.floor(minutes / 60);
+    const m = minutes % 60;
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+};
+
+const getAvailableSlots = async (facilityId, date) => {
     const facilityResult = await pool.query(
-        `SELECT facility_id, name, max_people 
-     FROM public.facilities 
-     WHERE facility_id = $1`,
+        `SELECT facility_id, name, max_people, max_duration_minutes, usage_guideline
+         FROM public.facilities WHERE facility_id = $1`,
         [facilityId]
     );
-
-    if (facilityResult.rows.length === 0) {
-        throw new Error('FACILITY_NOT_FOUND');
-    }
-
+    if (facilityResult.rows.length === 0) throw new Error('FACILITY_NOT_FOUND');
     const facility = facilityResult.rows[0];
-    const maxPeople = facility.max_people;
 
-    // 2. Query all predefined time slots for the next N days
-    const slotsResult = await pool.query(
-        `SELECT 
-        slot_time_id,
-        slot_date,
-        TO_CHAR(slot_start_time, 'HH24:MI') AS start_time,
-        TO_CHAR(slot_end_time, 'HH24:MI') AS end_time
-     FROM public.facility_slot_times
-     WHERE facility_id = $1
-       AND slot_date >= CURRENT_DATE
-       AND slot_date < CURRENT_DATE + ($2 || ' days')::interval
-     ORDER BY slot_date, slot_start_time`,
-        [facilityId, daysAhead]
-    );
+    const dayOfWeek = getDayOfWeek(date);
 
-    const slots = slotsResult.rows;
+    const [scheduleResult, allSchedulesResult] = await Promise.all([
+        pool.query(
+            `SELECT TO_CHAR(start_time, 'HH24:MI') AS start_time, TO_CHAR(end_time, 'HH24:MI') AS end_time
+             FROM public.facility_schedules WHERE facility_id = $1 AND day_of_week = $2`,
+            [facilityId, dayOfWeek]
+        ),
+        pool.query(
+            `SELECT day_of_week, TO_CHAR(start_time, 'HH24:MI') AS start_time, TO_CHAR(end_time, 'HH24:MI') AS end_time
+             FROM public.facility_schedules WHERE facility_id = $1
+             ORDER BY ARRAY_POSITION(ARRAY['sun','mon','tue','wed','thu','fri','sat'], day_of_week)`,
+            [facilityId]
+        ),
+    ]);
 
-    if (slots.length === 0) {
-        return { facilityId, facilityName: facility.name, maxPeople, slots: [] };
-    }
+    const schedules = allSchedulesResult.rows.map((r) => ({
+        dayOfWeek: r.day_of_week,
+        startTime: r.start_time,
+        endTime: r.end_time,
+    }));
 
-    const bookingsResult = await pool.query(
-        `SELECT 
-        TO_CHAR(bd.date, 'YYYY-MM-DD') AS date,
-        TO_CHAR(bd.start_time, 'HH24:MI') AS start_time,
-        TO_CHAR(bd.end_time, 'HH24:MI') AS end_time
-     FROM public.bookings b
-     JOIN public.booking_details bd ON b.booking_detail_id = bd.booking_detail_id
-     WHERE bd.facility_id = $1
-       AND bd.date >= CURRENT_DATE
-       AND bd.date < CURRENT_DATE + ($2 || ' days')::interval
-       AND b.booking_status != 'cancelled'`,
-        [facilityId, daysAhead]
-    );
-
-    const existingBookings = bookingsResult.rows;
-
-    // 4. Calculate the occupancy count using the overlap algorithm
-    const enrichedSlots = slots.map((slot) => {
-        const dateStr = slot.slot_date;
-
-        const occupied = existingBookings.filter((booking) => {
-            if (booking.date !== dateStr) return false;
-            // booking.start < slot.end AND booking.end > slot.start
-            const bookingStart = booking.start_time;
-            const bookingEnd = booking.end_time;
-            const slotStart = slot.start_time;
-            const slotEnd = slot.end_time;
-            return bookingStart < slotEnd && bookingEnd > slotStart;
-        }).length;
-
-        return {
-            slotTimeId: slot.slot_time_id,
-            slotDate: dateStr,
-            startTime: slot.start_time,
-            endTime: slot.end_time,
-            occupied,
-            available: occupied < maxPeople,
-        };
-    });
-
-    return {
+    const base = {
         facilityId: facility.facility_id,
         facilityName: facility.name,
-        maxPeople,
-        slots: enrichedSlots,
+        maxPeople: facility.max_people,
+        maxDurationMinutes: facility.max_duration_minutes ?? null,
+        usageGuideline: facility.usage_guideline ?? null,
+        schedules,
+        date,
     };
+
+    if (scheduleResult.rows.length === 0) {
+        return { ...base, slots: [] };
+    }
+
+    const { start_time, end_time } = scheduleResult.rows[0];
+    const startMin = toMinutes(start_time);
+    const endMin = toMinutes(end_time);
+
+    const slotTimes = [];
+    for (let t = startMin; t + 60 <= endMin; t += 60) {
+        slotTimes.push({ startTime: padTime(t), endTime: padTime(t + 60) });
+    }
+
+    // Get all bookings for the day to calculate per-slot occupancy using overlap
+    const bookingsResult = await pool.query(
+        `SELECT TO_CHAR(bd.start_time, 'HH24:MI') AS start_time, TO_CHAR(bd.end_time, 'HH24:MI') AS end_time
+         FROM public.bookings b
+                  JOIN public.booking_details bd ON b.booking_detail_id = bd.booking_detail_id
+         WHERE bd.facility_id = $1 AND bd.date = $2 AND b.booking_status = 'upcoming'`,
+        [facilityId, date]
+    );
+
+    const bookings = bookingsResult.rows;
+
+    const slots = slotTimes.map(({ startTime, endTime }) => {
+        const occupied = bookings.filter(
+            (b) => b.start_time < endTime && b.end_time > startTime
+        ).length;
+        return { startTime, endTime, occupied, available: occupied < facility.max_people };
+    });
+
+    return { ...base, slots };
 };
 
 /**
@@ -102,84 +110,135 @@ const getAvailableSlots = async (facilityId, daysAhead = 30) => {
  * @param {string} params.intendedActivity
  * @returns {Object}
  */
-const submitBookingRequest = async ({
-                                        userId,
-                                        facilityId,
-                                        slotDate,
-                                        startTime,
-                                        endTime,
-                                        intendedActivity,
-                                    }) => {
-    // 1. Find the member_id corresponding to the current user
+const submitBookingRequest = async ({ userId, facilityId, slotDate, startTime, endTime, intendedActivity, partnerMemberId }) => {
     const memberResult = await pool.query(
-        `SELECT member_id FROM public.members WHERE user_id = $1`,
-        [userId]
+        `SELECT member_id FROM public.members WHERE user_id = $1`, [userId]
     );
-    if (memberResult.rows.length === 0) {
-        throw new Error('MEMBER_NOT_FOUND');
-    }
+    if (memberResult.rows.length === 0) throw new Error('MEMBER_NOT_FOUND');
     const memberId = memberResult.rows[0].member_id;
 
-    // 2. Check if the venue exists
-    const facilityResult = await pool.query(
-        `SELECT facility_id FROM public.facilities WHERE facility_id = $1`,
-        [facilityId]
-    );
-    if (facilityResult.rows.length === 0) {
-        throw new Error('FACILITY_NOT_FOUND');
+    if (partnerMemberId != null) {
+        const partnerIdInt = parseInt(partnerMemberId, 10);
+        if (partnerIdInt === memberId) {
+            throw new Error('CANNOT_MATCH_SELF');
+        }
+        const partnerResult = await pool.query(
+            `SELECT member_id FROM public.members WHERE member_id = $1`,
+            [partnerIdInt]
+        );
+        if (partnerResult.rows.length === 0) {
+            throw new Error('PARTNER_NOT_FOUND');
+        }
     }
 
-    if (startTime >= endTime) {
-        throw new Error('INVALID_TIME_RANGE');
-    }
+
+    const facilityResult = await pool.query(
+        `SELECT facility_id, max_people, max_duration_minutes FROM public.facilities WHERE facility_id = $1`,
+        [facilityId]
+    );
+    if (facilityResult.rows.length === 0) throw new Error('FACILITY_NOT_FOUND');
+    const facility = facilityResult.rows[0];
+
+    if (startTime >= endTime) throw new Error('INVALID_TIME_RANGE');
 
     const todayLocal = new Date();
     const todayStr = `${todayLocal.getFullYear()}-${String(todayLocal.getMonth() + 1).padStart(2, '0')}-${String(todayLocal.getDate()).padStart(2, '0')}`;
-    if (slotDate < todayStr) {
-        throw new Error('DATE_IN_PAST');
+    if (slotDate < todayStr) throw new Error('DATE_IN_PAST');
+
+    // Validate against facility schedule
+    const dayOfWeek = getDayOfWeek(slotDate);
+    const scheduleResult = await pool.query(
+        `SELECT TO_CHAR(start_time, 'HH24:MI') AS start_time, TO_CHAR(end_time, 'HH24:MI') AS end_time
+         FROM public.facility_schedules WHERE facility_id = $1 AND day_of_week = $2`,
+        [facilityId, dayOfWeek]
+    );
+    if (scheduleResult.rows.length === 0) throw new Error('FACILITY_CLOSED_ON_DAY');
+    const schedule = scheduleResult.rows[0];
+    if (startTime < schedule.start_time || endTime > schedule.end_time) throw new Error('OUTSIDE_SCHEDULE');
+
+    // Check max_duration_minutes
+    if (facility.max_duration_minutes) {
+        const duration = toMinutes(endTime) - toMinutes(startTime);
+        if (duration > facility.max_duration_minutes) throw new Error('EXCEEDS_MAX_DURATION');
     }
 
-    // 4. Check whether this member already has a pending request for the same time slot (to prevent duplicate submissions)
+    // Check capacity for every 1-hour slot in the requested range
+    const startMin = toMinutes(startTime);
+    const endMin = toMinutes(endTime);
+    for (let t = startMin; t < endMin; t += 60) {
+        const slotStart = padTime(t);
+        const slotEnd = padTime(t + 60);
+        const { rows } = await pool.query(
+            `SELECT COUNT(*) AS cnt FROM public.bookings b
+                                             JOIN public.booking_details bd ON b.booking_detail_id = bd.booking_detail_id
+             WHERE bd.facility_id = $1 AND bd.date = $2
+               AND bd.start_time < $4 AND bd.end_time > $3
+               AND b.booking_status = 'upcoming'`,
+            [facilityId, slotDate, slotStart, slotEnd]
+        );
+        if (parseInt(rows[0].cnt, 10) >= facility.max_people) throw new Error('CAPACITY_EXCEEDED');
+    }
+
+    // Duplicate check
     const duplicateResult = await pool.query(
-        `SELECT br.booking_request_id
-     FROM public.booking_requests br
-     JOIN public.booking_details bd ON br.booking_detail_id = bd.booking_detail_id
-     WHERE bd.member_id = $1
-       AND bd.facility_id = $2
-       AND bd.date = $3
-       AND bd.start_time = $4
-       AND bd.end_time = $5
-       AND br.request_status = 'pending'`,
+        `SELECT br.booking_request_id FROM public.booking_requests br
+                                               JOIN public.booking_details bd ON br.booking_detail_id = bd.booking_detail_id
+         WHERE bd.member_id = $1 AND bd.facility_id = $2 AND bd.date = $3
+           AND bd.start_time = $4 AND bd.end_time = $5 AND br.request_status = 'pending'`,
         [memberId, facilityId, slotDate, startTime, endTime]
     );
-    if (duplicateResult.rows.length > 0) {
-        throw new Error('DUPLICATE_REQUEST');
+    if (duplicateResult.rows.length > 0) throw new Error('DUPLICATE_REQUEST');
+
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+
+        const detailResult = await client.query(
+            `INSERT INTO public.booking_details
+               (facility_id, date, start_time, end_time, intended_activity, member_id)
+             VALUES ($1, $2, $3, $4, $5, $6)
+             RETURNING booking_detail_id`,
+            [facilityId, slotDate, startTime, endTime, intendedActivity || null, memberId]
+        );
+        const bookingDetailId = detailResult.rows[0].booking_detail_id;
+
+        const requestResult = await client.query(
+            `INSERT INTO public.booking_requests (booking_detail_id, request_status)
+             VALUES ($1, 'pending')
+             RETURNING booking_request_id, request_status, created_at`,
+            [bookingDetailId]
+        );
+        const bookingRequest = requestResult.rows[0];
+        const bookingRequestId = bookingRequest.booking_request_id;
+
+        let matchingRequestId = null;
+        if (partnerMemberId != null) {
+            const matchResult = await client.query(
+                `INSERT INTO public.matching_requests
+                   (sender_id, receiver_id, booking_request_id, status)
+                 VALUES ($1, $2, $3, 'pending')
+                 RETURNING request_matching_id`,
+                [memberId, parseInt(partnerMemberId, 10), bookingRequestId]
+            );
+            matchingRequestId = matchResult.rows[0].request_matching_id;
+        }
+
+        await client.query('COMMIT');
+
+        return {
+            bookingRequestId,
+            bookingDetailId,
+            status: bookingRequest.request_status,
+            createdAt: bookingRequest.created_at,
+            partnerMatchingCreated: partnerMemberId != null,
+            ...(matchingRequestId != null && { matchingRequestId }),
+        };
+    } catch (err) {
+        await client.query('ROLLBACK');
+        throw err;
+    } finally {
+        client.release();
     }
-
-    // 5. Insert booking_details
-    const detailResult = await pool.query(
-        `INSERT INTO public.booking_details 
-       (facility_id, date, start_time, end_time, intended_activity, member_id)
-     VALUES ($1, $2, $3, $4, $5, $6)
-     RETURNING booking_detail_id`,
-        [facilityId, slotDate, startTime, endTime, intendedActivity || null, memberId]
-    );
-    const bookingDetailId = detailResult.rows[0].booking_detail_id;
-
-    // 6. Insert booking_requests
-    const requestResult = await pool.query(
-        `INSERT INTO public.booking_requests (booking_detail_id, request_status)
-     VALUES ($1, 'pending')
-     RETURNING booking_request_id, request_status, created_at`,
-        [bookingDetailId]
-    );
-
-    return {
-        bookingRequestId: requestResult.rows[0].booking_request_id,
-        bookingDetailId,
-        status: requestResult.rows[0].request_status,
-        createdAt: requestResult.rows[0].created_at,
-    };
 };
 
 /**
@@ -201,31 +260,31 @@ const getPendingRequestsForStaff = async (userId) => {
     // 2. Retrieve all pending requests for the venues managed by this staff member
     const result = await pool.query(
         `
-    SELECT
-      br.booking_request_id,
-      br.request_status,
-      br.created_at,
-      bd.booking_detail_id,
-      bd.facility_id,
-      f.name AS facility_name,
-      bd.date,
-      TO_CHAR(bd.start_time, 'HH24:MI') AS start_time,
-      TO_CHAR(bd.end_time, 'HH24:MI') AS end_time,
-      bd.intended_activity,
-      bd.member_id,
-      u.first_name AS member_first_name,
-      u.last_name AS member_last_name,
-      u.email AS member_email
-    FROM public.booking_requests br
-    JOIN public.booking_details bd ON br.booking_detail_id = bd.booking_detail_id
-    JOIN public.facilities f ON bd.facility_id = f.facility_id
-    JOIN public.staff_facilities sf ON sf.facility_id = bd.facility_id
-    JOIN public.members m ON bd.member_id = m.member_id
-    JOIN public.users u ON m.user_id = u.id
-    WHERE sf.staff_id = $1
-      AND br.request_status = 'pending'
-    ORDER BY br.created_at ASC
-    `,
+            SELECT
+                br.booking_request_id,
+                br.request_status,
+                br.created_at,
+                bd.booking_detail_id,
+                bd.facility_id,
+                f.name AS facility_name,
+                bd.date,
+                TO_CHAR(bd.start_time, 'HH24:MI') AS start_time,
+                TO_CHAR(bd.end_time, 'HH24:MI') AS end_time,
+                bd.intended_activity,
+                bd.member_id,
+                u.first_name AS member_first_name,
+                u.last_name AS member_last_name,
+                u.email AS member_email
+            FROM public.booking_requests br
+                     JOIN public.booking_details bd ON br.booking_detail_id = bd.booking_detail_id
+                     JOIN public.facilities f ON bd.facility_id = f.facility_id
+                     JOIN public.staff_facilities sf ON sf.facility_id = bd.facility_id
+                     JOIN public.members m ON bd.member_id = m.member_id
+                     JOIN public.users u ON m.user_id = u.id
+            WHERE sf.staff_id = $1
+              AND br.request_status = 'pending'
+            ORDER BY br.created_at ASC
+        `,
         [staffId]
     );
 
@@ -263,28 +322,28 @@ const checkBookingConflict = async (bookingRequestId, staffId) => {
     // 1. Query request details
     const detailResult = await pool.query(
         `
-    SELECT
-      br.booking_request_id,
-      br.request_status,
-      bd.booking_detail_id,
-      bd.facility_id,
-      bd.date,
-      bd.start_time,
-      bd.end_time,
-      bd.intended_activity,
-      bd.member_id,
-      f.name AS facility_name,
-      f.max_people,
-      u.account_status AS member_account_status,
-      u.first_name AS member_first_name,
-      u.last_name AS member_last_name
-    FROM public.booking_requests br
-    JOIN public.booking_details bd ON br.booking_detail_id = bd.booking_detail_id
-    JOIN public.facilities f ON bd.facility_id = f.facility_id
-    JOIN public.members m ON bd.member_id = m.member_id
-    JOIN public.users u ON m.user_id = u.id
-    WHERE br.booking_request_id = $1
-    `,
+            SELECT
+                br.booking_request_id,
+                br.request_status,
+                bd.booking_detail_id,
+                bd.facility_id,
+                bd.date,
+                bd.start_time,
+                bd.end_time,
+                bd.intended_activity,
+                bd.member_id,
+                f.name AS facility_name,
+                f.max_people,
+                u.account_status AS member_account_status,
+                u.first_name AS member_first_name,
+                u.last_name AS member_last_name
+            FROM public.booking_requests br
+                     JOIN public.booking_details bd ON br.booking_detail_id = bd.booking_detail_id
+                     JOIN public.facilities f ON bd.facility_id = f.facility_id
+                     JOIN public.members m ON bd.member_id = m.member_id
+                     JOIN public.users u ON m.user_id = u.id
+            WHERE br.booking_request_id = $1
+        `,
         [bookingRequestId]
     );
 
@@ -303,7 +362,7 @@ const checkBookingConflict = async (bookingRequestId, staffId) => {
     // 3. The employee must be in charge of this venue
     const staffFacilityResult = await pool.query(
         `SELECT staff_facility_id FROM public.staff_facilities
-     WHERE staff_id = $1 AND facility_id = $2`,
+         WHERE staff_id = $1 AND facility_id = $2`,
         [staffId, detail.facility_id]
     );
     if (staffFacilityResult.rows.length === 0) {
@@ -319,19 +378,20 @@ const checkBookingConflict = async (bookingRequestId, staffId) => {
     // new_start < existing_end AND new_end > existing_start
     const occupancyResult = await pool.query(
         `
-    SELECT COUNT(*) AS occupied_count
-    FROM public.bookings b
-    JOIN public.booking_details bd ON b.booking_detail_id = bd.booking_detail_id
-    WHERE bd.facility_id = $1
-      AND bd.date = $2
-      AND bd.start_time < $4
-      AND bd.end_time > $3
-      AND b.booking_status != 'cancelled'
-    `,
+            SELECT COUNT(*) AS occupied_count
+            FROM public.bookings b
+                     JOIN public.booking_details bd ON b.booking_detail_id = bd.booking_detail_id
+            WHERE bd.facility_id = $1
+              AND bd.date = $2
+              AND bd.start_time < $4
+              AND bd.end_time > $3
+              AND b.booking_status = 'upcoming'
+        `,
         [detail.facility_id, detail.date, detail.start_time, detail.end_time]
     );
     const occupied = parseInt(occupancyResult.rows[0].occupied_count, 10);
     if (occupied >= detail.max_people) {
+        console.log("max_people:", detail.max_people, "occupied:", occupied);
         errors.push('CAPACITY_EXCEEDED');
     }
 
@@ -384,23 +444,23 @@ const approveRequest = async (bookingRequestId, userId) => {
     // 3. update booking_requests.status = 'approved'
     await pool.query(
         `UPDATE public.booking_requests
-     SET request_status = 'approved'
-     WHERE booking_request_id = $1`,
+         SET request_status = 'approved'
+         WHERE booking_request_id = $1`,
         [bookingRequestId]
     );
 
     // 4. Insert a reservation into the bookings table(status = 'upcoming')
     await pool.query(
         `UPDATE public.booking_details
-     SET staff_id = $2
-     WHERE booking_detail_id = $1`,
+         SET staff_id = $2
+         WHERE booking_detail_id = $1`,
         [requestDetail.bookingDetailId, staffId]
     );
 
     const bookingResult = await pool.query(
         `INSERT INTO public.bookings (booking_detail_id, booking_status)
-     VALUES ($1, 'upcoming')
-     RETURNING booking_id, booking_status, created_at`,
+         VALUES ($1, 'upcoming')
+             RETURNING booking_id, booking_status, created_at`,
         [requestDetail.bookingDetailId]
     );
 
@@ -413,7 +473,7 @@ const approveRequest = async (bookingRequestId, userId) => {
         const memberUserId = memberUserResult.rows[0].user_id;
         await pool.query(
             `INSERT INTO public.notification_histories (user_id, message, type)
-       VALUES ($1, $2, 'booking_approved')`,
+             VALUES ($1, $2, 'booking_approved')`,
             [
                 memberUserId,
                 `Your booking for ${requestDetail.facilityName} on ${requestDetail.date} (${requestDetail.startTime}-${requestDetail.endTime}) has been approved.`,
@@ -450,21 +510,21 @@ const rejectRequest = async (bookingRequestId, userId, reason) => {
     // 2. details
     const detailResult = await pool.query(
         `
-    SELECT
-      br.booking_request_id,
-      br.request_status,
-      bd.booking_detail_id,
-      bd.facility_id,
-      bd.date,
-      bd.start_time,
-      bd.end_time,
-      bd.member_id,
-      f.name AS facility_name
-    FROM public.booking_requests br
-    JOIN public.booking_details bd ON br.booking_detail_id = bd.booking_detail_id
-    JOIN public.facilities f ON bd.facility_id = f.facility_id
-    WHERE br.booking_request_id = $1
-    `,
+            SELECT
+                br.booking_request_id,
+                br.request_status,
+                bd.booking_detail_id,
+                bd.facility_id,
+                bd.date,
+                bd.start_time,
+                bd.end_time,
+                bd.member_id,
+                f.name AS facility_name
+            FROM public.booking_requests br
+                     JOIN public.booking_details bd ON br.booking_detail_id = bd.booking_detail_id
+                     JOIN public.facilities f ON bd.facility_id = f.facility_id
+            WHERE br.booking_request_id = $1
+        `,
         [bookingRequestId]
     );
 
@@ -480,7 +540,7 @@ const rejectRequest = async (bookingRequestId, userId, reason) => {
     // 3. Verify that the employee is responsible for this facility
     const sfResult = await pool.query(
         `SELECT staff_facility_id FROM public.staff_facilities
-     WHERE staff_id = $1 AND facility_id = $2`,
+         WHERE staff_id = $1 AND facility_id = $2`,
         [staffId, detail.facility_id]
     );
     if (sfResult.rows.length === 0) {
@@ -490,16 +550,16 @@ const rejectRequest = async (bookingRequestId, userId, reason) => {
     // 4. update rejected
     await pool.query(
         `UPDATE public.booking_requests
-     SET request_status = 'rejected'
-     WHERE booking_request_id = $1`,
+         SET request_status = 'rejected'
+         WHERE booking_request_id = $1`,
         [bookingRequestId]
     );
 
     // 5. record the staff
     await pool.query(
         `UPDATE public.booking_details
-     SET staff_id = $2
-     WHERE booking_detail_id = $1`,
+         SET staff_id = $2
+         WHERE booking_detail_id = $1`,
         [detail.booking_detail_id, staffId]
     );
 
@@ -515,7 +575,7 @@ const rejectRequest = async (bookingRequestId, userId, reason) => {
             : `Your booking for ${detail.facility_name} on ${detail.date} has been rejected.`;
         await pool.query(
             `INSERT INTO public.notification_histories (user_id, message, type)
-       VALUES ($1, $2, 'booking_rejected')`,
+             VALUES ($1, $2, 'booking_rejected')`,
             [memberUserId, rejectMessage]
         );
     }
@@ -545,73 +605,73 @@ const getMyBookings = async (userId) => {
     // 2. search all pending booking
     const pendingResult = await pool.query(
         `
-    SELECT
-      br.booking_request_id,
-      br.request_status,
-      br.created_at,
-      bd.facility_id,
-      f.name AS facility_name,
-      TO_CHAR(bd.date, 'YYYY-MM-DD') AS date,
+            SELECT
+                br.booking_request_id,
+                br.request_status,
+                br.created_at,
+                bd.facility_id,
+                f.name AS facility_name,
+                TO_CHAR(bd.date, 'YYYY-MM-DD') AS date,
       TO_CHAR(bd.start_time, 'HH24:MI') AS start_time,
       TO_CHAR(bd.end_time, 'HH24:MI') AS end_time,
       bd.intended_activity,
       bd.alt_facility_id,
       af.name AS alt_facility_name
-    FROM public.booking_requests br
-    JOIN public.booking_details bd ON br.booking_detail_id = bd.booking_detail_id
-    JOIN public.facilities f ON bd.facility_id = f.facility_id
-    LEFT JOIN public.facilities af ON af.facility_id = CAST(NULLIF(bd.alt_facility_id, '') AS INTEGER)
-    WHERE bd.member_id = $1
-    AND br.request_status IN ('pending', 'alt_suggested')
-    ORDER BY bd.date ASC, bd.start_time ASC
-    `,
+            FROM public.booking_requests br
+                JOIN public.booking_details bd ON br.booking_detail_id = bd.booking_detail_id
+                JOIN public.facilities f ON bd.facility_id = f.facility_id
+                LEFT JOIN public.facilities af ON af.facility_id = CAST(NULLIF(bd.alt_facility_id, '') AS INTEGER)
+            WHERE bd.member_id = $1
+              AND br.request_status IN ('pending', 'alt_suggested')
+            ORDER BY bd.date ASC, bd.start_time ASC
+        `,
         [memberId]
     );
 
     // 3. All booking(upcoming + completed + cancelled)
     const bookingsResult = await pool.query(
         `
-    SELECT
-      b.booking_id,
-      b.booking_status,
-      b.created_at,
-      br.booking_request_id,
-      bd.facility_id,
-      f.name AS facility_name,
-      bd.date,
-      TO_CHAR(bd.start_time, 'HH24:MI') AS start_time,
-      TO_CHAR(bd.end_time, 'HH24:MI') AS end_time,
-      bd.intended_activity
-    FROM public.bookings b
-    JOIN public.booking_details bd ON b.booking_detail_id = bd.booking_detail_id
-    JOIN public.facilities f ON bd.facility_id = f.facility_id
-    LEFT JOIN public.booking_requests br ON br.booking_detail_id = bd.booking_detail_id
-    WHERE bd.member_id = $1
-    ORDER BY bd.date DESC, bd.start_time DESC
-    `,
+            SELECT
+                b.booking_id,
+                b.booking_status,
+                b.created_at,
+                br.booking_request_id,
+                bd.facility_id,
+                f.name AS facility_name,
+                bd.date,
+                TO_CHAR(bd.start_time, 'HH24:MI') AS start_time,
+                TO_CHAR(bd.end_time, 'HH24:MI') AS end_time,
+                bd.intended_activity
+            FROM public.bookings b
+                     JOIN public.booking_details bd ON b.booking_detail_id = bd.booking_detail_id
+                     JOIN public.facilities f ON bd.facility_id = f.facility_id
+                     LEFT JOIN public.booking_requests br ON br.booking_detail_id = bd.booking_detail_id
+            WHERE bd.member_id = $1
+            ORDER BY bd.date DESC, bd.start_time DESC
+        `,
         [memberId]
     );
 
     // 4. rejected booking
     const rejectedResult = await pool.query(
         `
-    SELECT
-      br.booking_request_id,
-      br.request_status,
-      br.created_at,
-      bd.facility_id,
-      f.name AS facility_name,
-      bd.date,
-      TO_CHAR(bd.start_time, 'HH24:MI') AS start_time,
-      TO_CHAR(bd.end_time, 'HH24:MI') AS end_time,
-      bd.intended_activity
-    FROM public.booking_requests br
-    JOIN public.booking_details bd ON br.booking_detail_id = bd.booking_detail_id
-    JOIN public.facilities f ON bd.facility_id = f.facility_id
-    WHERE bd.member_id = $1
-      AND br.request_status IN ('rejected', 'cancelled')
-    ORDER BY br.created_at DESC
-    `,
+            SELECT
+                br.booking_request_id,
+                br.request_status,
+                br.created_at,
+                bd.facility_id,
+                f.name AS facility_name,
+                bd.date,
+                TO_CHAR(bd.start_time, 'HH24:MI') AS start_time,
+                TO_CHAR(bd.end_time, 'HH24:MI') AS end_time,
+                bd.intended_activity
+            FROM public.booking_requests br
+                     JOIN public.booking_details bd ON br.booking_detail_id = bd.booking_detail_id
+                     JOIN public.facilities f ON bd.facility_id = f.facility_id
+            WHERE bd.member_id = $1
+              AND br.request_status IN ('rejected', 'cancelled')
+            ORDER BY br.created_at DESC
+        `,
         [memberId]
     );
 
@@ -687,15 +747,15 @@ const cancelBooking = async (bookingId, userId) => {
     // 2. is upcoming?
     const bookingResult = await pool.query(
         `
-    SELECT b.booking_id, b.booking_status, bd.member_id,
-           bd.facility_id, f.name AS facility_name,
-           bd.date, TO_CHAR(bd.start_time, 'HH24:MI') AS start_time,
-           TO_CHAR(bd.end_time, 'HH24:MI') AS end_time
-    FROM public.bookings b
-    JOIN public.booking_details bd ON b.booking_detail_id = bd.booking_detail_id
-    JOIN public.facilities f ON bd.facility_id = f.facility_id
-    WHERE b.booking_id = $1
-    `,
+            SELECT b.booking_id, b.booking_status, bd.member_id,
+                   bd.facility_id, f.name AS facility_name,
+                   bd.date, TO_CHAR(bd.start_time, 'HH24:MI') AS start_time,
+                   TO_CHAR(bd.end_time, 'HH24:MI') AS end_time
+            FROM public.bookings b
+                     JOIN public.booking_details bd ON b.booking_detail_id = bd.booking_detail_id
+                     JOIN public.facilities f ON bd.facility_id = f.facility_id
+            WHERE b.booking_id = $1
+        `,
         [bookingId]
     );
 
@@ -722,7 +782,7 @@ const cancelBooking = async (bookingId, userId) => {
     // 4. notification
     await pool.query(
         `INSERT INTO public.notification_histories (user_id, message, type)
-     VALUES ($1, $2, 'booking_cancelled')`,
+         VALUES ($1, $2, 'booking_cancelled')`,
         [
             userId,
             `You have cancelled your booking for ${booking.facility_name} on ${booking.date} (${booking.start_time}-${booking.end_time}).`,
@@ -743,12 +803,12 @@ const cancelBooking = async (bookingId, userId) => {
 const getNotifications = async (userId) => {
     const result = await pool.query(
         `
-    SELECT notif_id, message, is_read, type, sending_at
-    FROM public.notification_histories
-    WHERE user_id = $1
-    ORDER BY sending_at DESC
-    LIMIT 50
-    `,
+            SELECT notif_id, message, is_read, type, sending_at
+            FROM public.notification_histories
+            WHERE user_id = $1
+            ORDER BY sending_at DESC
+                LIMIT 50
+        `,
         [userId]
     );
 
@@ -769,8 +829,8 @@ const getNotifications = async (userId) => {
 const markNotificationRead = async (notifId, userId) => {
     await pool.query(
         `UPDATE public.notification_histories
-     SET is_read = TRUE
-     WHERE notif_id = $1 AND user_id = $2`,
+         SET is_read = TRUE
+         WHERE notif_id = $1 AND user_id = $2`,
         [notifId, userId]
     );
     return { notifId, isRead: true };
@@ -783,8 +843,8 @@ const markNotificationRead = async (notifId, userId) => {
 const markAllNotificationsRead = async (userId) => {
     await pool.query(
         `UPDATE public.notification_histories
-     SET is_read = TRUE
-     WHERE user_id = $1 AND is_read = FALSE`,
+         SET is_read = TRUE
+         WHERE user_id = $1 AND is_read = FALSE`,
         [userId]
     );
     return { message: 'all notifications marked as read' };
@@ -807,13 +867,13 @@ const getUpcomingBookingsForStaff = async (userId) => {
 
     const result = await pool.query(
         `
-    SELECT
-      b.booking_id,
-      b.booking_status,
-      b.created_at,
-      bd.facility_id,
-      f.name AS facility_name,
-      TO_CHAR(bd.date, 'YYYY-MM-DD') AS date,
+            SELECT
+                b.booking_id,
+                b.booking_status,
+                b.created_at,
+                bd.facility_id,
+                f.name AS facility_name,
+                TO_CHAR(bd.date, 'YYYY-MM-DD') AS date,
       TO_CHAR(bd.start_time, 'HH24:MI') AS start_time,
       TO_CHAR(bd.end_time, 'HH24:MI') AS end_time,
       bd.intended_activity,
@@ -821,16 +881,16 @@ const getUpcomingBookingsForStaff = async (userId) => {
       u.first_name AS member_first_name,
       u.last_name AS member_last_name,
       u.email AS member_email
-    FROM public.bookings b
-    JOIN public.booking_details bd ON b.booking_detail_id = bd.booking_detail_id
-    JOIN public.facilities f ON bd.facility_id = f.facility_id
-    JOIN public.staff_facilities sf ON sf.facility_id = bd.facility_id
-    JOIN public.members m ON bd.member_id = m.member_id
-    JOIN public.users u ON m.user_id = u.id
-    WHERE sf.staff_id = $1
-      AND b.booking_status = 'upcoming'
-    ORDER BY bd.date ASC, bd.start_time ASC
-    `,
+            FROM public.bookings b
+                JOIN public.booking_details bd ON b.booking_detail_id = bd.booking_detail_id
+                JOIN public.facilities f ON bd.facility_id = f.facility_id
+                JOIN public.staff_facilities sf ON sf.facility_id = bd.facility_id
+                JOIN public.members m ON bd.member_id = m.member_id
+                JOIN public.users u ON m.user_id = u.id
+            WHERE sf.staff_id = $1
+              AND b.booking_status = 'upcoming'
+            ORDER BY bd.date ASC, bd.start_time ASC
+        `,
         [staffId]
     );
 
@@ -874,16 +934,16 @@ const completeBooking = async (bookingId, userId) => {
     // 2.booking details
     const bookingResult = await pool.query(
         `
-    SELECT b.booking_id, b.booking_status, bd.facility_id,
-           f.name AS facility_name, bd.member_id,
-           TO_CHAR(bd.date, 'YYYY-MM-DD') AS date,
+            SELECT b.booking_id, b.booking_status, bd.facility_id,
+                   f.name AS facility_name, bd.member_id,
+                   TO_CHAR(bd.date, 'YYYY-MM-DD') AS date,
            TO_CHAR(bd.start_time, 'HH24:MI') AS start_time,
            TO_CHAR(bd.end_time, 'HH24:MI') AS end_time
-    FROM public.bookings b
-    JOIN public.booking_details bd ON b.booking_detail_id = bd.booking_detail_id
-    JOIN public.facilities f ON bd.facility_id = f.facility_id
-    WHERE b.booking_id = $1
-    `,
+            FROM public.bookings b
+                JOIN public.booking_details bd ON b.booking_detail_id = bd.booking_detail_id
+                JOIN public.facilities f ON bd.facility_id = f.facility_id
+            WHERE b.booking_id = $1
+        `,
         [bookingId]
     );
 
@@ -901,7 +961,7 @@ const completeBooking = async (bookingId, userId) => {
     // 4. Verify that the employee is in charge of this facility
     const sfResult = await pool.query(
         `SELECT staff_facility_id FROM public.staff_facilities
-     WHERE staff_id = $1 AND facility_id = $2`,
+         WHERE staff_id = $1 AND facility_id = $2`,
         [staffId, booking.facility_id]
     );
     if (sfResult.rows.length === 0) {
@@ -922,7 +982,7 @@ const completeBooking = async (bookingId, userId) => {
     if (memberUserResult.rows.length > 0) {
         await pool.query(
             `INSERT INTO public.notification_histories (user_id, message, type)
-       VALUES ($1, $2, 'booking_completed')`,
+             VALUES ($1, $2, 'booking_completed')`,
             [
                 memberUserResult.rows[0].user_id,
                 `Your session at ${booking.facility_name} on ${booking.date} (${booking.start_time}-${booking.end_time}) has been marked as completed.`,
@@ -953,16 +1013,16 @@ const cancelPendingRequest = async (bookingRequestId, userId) => {
 
     const requestResult = await pool.query(
         `
-    SELECT br.booking_request_id, br.request_status, bd.member_id,
-           bd.facility_id, f.name AS facility_name,
-           TO_CHAR(bd.date, 'YYYY-MM-DD') AS date,
+            SELECT br.booking_request_id, br.request_status, bd.member_id,
+                   bd.facility_id, f.name AS facility_name,
+                   TO_CHAR(bd.date, 'YYYY-MM-DD') AS date,
            TO_CHAR(bd.start_time, 'HH24:MI') AS start_time,
            TO_CHAR(bd.end_time, 'HH24:MI') AS end_time
-    FROM public.booking_requests br
-    JOIN public.booking_details bd ON br.booking_detail_id = bd.booking_detail_id
-    JOIN public.facilities f ON bd.facility_id = f.facility_id
-    WHERE br.booking_request_id = $1
-    `,
+            FROM public.booking_requests br
+                JOIN public.booking_details bd ON br.booking_detail_id = bd.booking_detail_id
+                JOIN public.facilities f ON bd.facility_id = f.facility_id
+            WHERE br.booking_request_id = $1
+        `,
         [bookingRequestId]
     );
 
@@ -1009,12 +1069,12 @@ const searchAlternativeFacilities = async (bookingRequestId, userId) => {
 
     const requestResult = await pool.query(
         `
-    SELECT br.booking_request_id, br.request_status,
-           bd.facility_id, bd.date, bd.start_time, bd.end_time
-    FROM public.booking_requests br
-    JOIN public.booking_details bd ON br.booking_detail_id = bd.booking_detail_id
-    WHERE br.booking_request_id = $1
-    `,
+            SELECT br.booking_request_id, br.request_status,
+                   bd.facility_id, bd.date, bd.start_time, bd.end_time
+            FROM public.booking_requests br
+                     JOIN public.booking_details bd ON br.booking_detail_id = bd.booking_detail_id
+            WHERE br.booking_request_id = $1
+        `,
         [bookingRequestId]
     );
 
@@ -1030,26 +1090,26 @@ const searchAlternativeFacilities = async (bookingRequestId, userId) => {
 
     const alternativesResult = await pool.query(
         `
-    SELECT
-      f.facility_id,
-      f.name,
-      f.description,
-      f.max_people,
-      COALESCE(occupied.cnt, 0) AS occupied_count
-    FROM public.facilities f
-    LEFT JOIN (
-      SELECT bd.facility_id, COUNT(*) AS cnt
-      FROM public.bookings b
-      JOIN public.booking_details bd ON b.booking_detail_id = bd.booking_detail_id
-      WHERE bd.date = $1
-        AND bd.start_time < $3
-        AND bd.end_time > $2
-        AND b.booking_status != 'cancelled'
-      GROUP BY bd.facility_id
-    ) occupied ON occupied.facility_id = f.facility_id
-    WHERE f.facility_id != $4
-    ORDER BY f.name
-    `,
+            SELECT
+                f.facility_id,
+                f.name,
+                f.description,
+                f.max_people,
+                COALESCE(occupied.cnt, 0) AS occupied_count
+            FROM public.facilities f
+                     LEFT JOIN (
+                SELECT bd.facility_id, COUNT(*) AS cnt
+                FROM public.bookings b
+                         JOIN public.booking_details bd ON b.booking_detail_id = bd.booking_detail_id
+                WHERE bd.date = $1
+                  AND bd.start_time < $3
+                  AND bd.end_time > $2
+                  AND b.booking_status = 'upcoming'
+                GROUP BY bd.facility_id
+            ) occupied ON occupied.facility_id = f.facility_id
+            WHERE f.facility_id != $4
+            ORDER BY f.name
+        `,
         [request.date, request.start_time, request.end_time, request.facility_id]
     );
 
@@ -1085,17 +1145,17 @@ const suggestAlternative = async (bookingRequestId, altFacilityId, userId) => {
 
     const requestResult = await pool.query(
         `
-    SELECT br.booking_request_id, br.request_status,
-           bd.booking_detail_id, bd.facility_id, bd.member_id,
-           TO_CHAR(bd.date, 'YYYY-MM-DD') AS date,
+            SELECT br.booking_request_id, br.request_status,
+                   bd.booking_detail_id, bd.facility_id, bd.member_id,
+                   TO_CHAR(bd.date, 'YYYY-MM-DD') AS date,
            TO_CHAR(bd.start_time, 'HH24:MI') AS start_time,
            TO_CHAR(bd.end_time, 'HH24:MI') AS end_time,
            f.name AS original_facility_name
-    FROM public.booking_requests br
-    JOIN public.booking_details bd ON br.booking_detail_id = bd.booking_detail_id
-    JOIN public.facilities f ON bd.facility_id = f.facility_id
-    WHERE br.booking_request_id = $1
-    `,
+            FROM public.booking_requests br
+                JOIN public.booking_details bd ON br.booking_detail_id = bd.booking_detail_id
+                JOIN public.facilities f ON bd.facility_id = f.facility_id
+            WHERE br.booking_request_id = $1
+        `,
         [bookingRequestId]
     );
 
@@ -1112,7 +1172,7 @@ const suggestAlternative = async (bookingRequestId, altFacilityId, userId) => {
     // Verify staff permissions
     const sfResult = await pool.query(
         `SELECT staff_facility_id FROM public.staff_facilities
-     WHERE staff_id = $1 AND facility_id = $2`,
+         WHERE staff_id = $1 AND facility_id = $2`,
         [staffId, request.facility_id]
     );
     if (sfResult.rows.length === 0) {
@@ -1131,13 +1191,13 @@ const suggestAlternative = async (bookingRequestId, altFacilityId, userId) => {
 
     await pool.query(
         `UPDATE public.booking_details SET alt_facility_id = $2, staff_id = $3
-     WHERE booking_detail_id = $1`,
+         WHERE booking_detail_id = $1`,
         [request.booking_detail_id, String(altFacilityId), staffId]
     );
 
     await pool.query(
         `UPDATE public.booking_requests SET request_status = 'alt_suggested'
-     WHERE booking_request_id = $1`,
+         WHERE booking_request_id = $1`,
         [bookingRequestId]
     );
 
@@ -1148,7 +1208,7 @@ const suggestAlternative = async (bookingRequestId, altFacilityId, userId) => {
     if (memberUserResult.rows.length > 0) {
         await pool.query(
             `INSERT INTO public.notification_histories (user_id, message, type)
-       VALUES ($1, $2, 'alt_suggested')`,
+             VALUES ($1, $2, 'alt_suggested')`,
             [
                 memberUserResult.rows[0].user_id,
                 `Staff suggested an alternative facility for your booking on ${request.date} (${request.start_time}-${request.end_time}): ${altFacilityName} instead of ${request.original_facility_name}. Please accept or decline.`,
@@ -1184,17 +1244,17 @@ const respondToAlternative = async (bookingRequestId, userId, accept) => {
 
     const requestResult = await pool.query(
         `
-    SELECT br.booking_request_id, br.request_status,
-           bd.booking_detail_id, bd.facility_id, bd.member_id,
-           bd.alt_facility_id,
-           TO_CHAR(bd.date, 'YYYY-MM-DD') AS date,
+            SELECT br.booking_request_id, br.request_status,
+                   bd.booking_detail_id, bd.facility_id, bd.member_id,
+                   bd.alt_facility_id,
+                   TO_CHAR(bd.date, 'YYYY-MM-DD') AS date,
            bd.start_time, bd.end_time,
            f.name AS original_facility_name
-    FROM public.booking_requests br
-    JOIN public.booking_details bd ON br.booking_detail_id = bd.booking_detail_id
-    JOIN public.facilities f ON bd.facility_id = f.facility_id
-    WHERE br.booking_request_id = $1
-    `,
+            FROM public.booking_requests br
+                JOIN public.booking_details bd ON br.booking_detail_id = bd.booking_detail_id
+                JOIN public.facilities f ON bd.facility_id = f.facility_id
+            WHERE br.booking_request_id = $1
+        `,
         [bookingRequestId]
     );
 
@@ -1221,7 +1281,7 @@ const respondToAlternative = async (bookingRequestId, userId, accept) => {
     if (!accept) {
         await pool.query(
             `UPDATE public.booking_requests SET request_status = 'rejected'
-       WHERE booking_request_id = $1`,
+             WHERE booking_request_id = $1`,
             [bookingRequestId]
         );
 
@@ -1242,15 +1302,15 @@ const respondToAlternative = async (bookingRequestId, userId, accept) => {
     // Check for conflicts again (alternative facilities may be fully booked during the waiting period)
     const occupancyResult = await pool.query(
         `
-    SELECT COUNT(*) AS occupied_count
-    FROM public.bookings b
-    JOIN public.booking_details bd ON b.booking_detail_id = bd.booking_detail_id
-    WHERE bd.facility_id = $1
-      AND bd.date = $2
-      AND bd.start_time < $4
-      AND bd.end_time > $3
-      AND b.booking_status != 'cancelled'
-    `,
+            SELECT COUNT(*) AS occupied_count
+            FROM public.bookings b
+                     JOIN public.booking_details bd ON b.booking_detail_id = bd.booking_detail_id
+            WHERE bd.facility_id = $1
+              AND bd.date = $2
+              AND bd.start_time < $4
+              AND bd.end_time > $3
+              AND b.booking_status = 'upcoming'
+        `,
         [altFacilityId, request.date, request.start_time, request.end_time]
     );
 
@@ -1262,26 +1322,26 @@ const respondToAlternative = async (bookingRequestId, userId, accept) => {
     // approve
     await pool.query(
         `UPDATE public.booking_details SET facility_id = $2
-     WHERE booking_detail_id = $1`,
+         WHERE booking_detail_id = $1`,
         [request.booking_detail_id, altFacilityId]
     );
 
     await pool.query(
         `UPDATE public.booking_requests SET request_status = 'approved'
-     WHERE booking_request_id = $1`,
+         WHERE booking_request_id = $1`,
         [bookingRequestId]
     );
 
     const bookingResult = await pool.query(
         `INSERT INTO public.bookings (booking_detail_id, booking_status)
-     VALUES ($1, 'upcoming')
-     RETURNING booking_id`,
+         VALUES ($1, 'upcoming')
+             RETURNING booking_id`,
         [request.booking_detail_id]
     );
 
     await pool.query(
         `INSERT INTO public.notification_histories (user_id, message, type)
-     VALUES ($1, $2, 'booking_approved')`,
+         VALUES ($1, $2, 'booking_approved')`,
         [
             userId,
             `Your booking has been confirmed at ${altFacility.name} on ${request.date}. The alternative facility was accepted.`,
@@ -1297,7 +1357,19 @@ const respondToAlternative = async (bookingRequestId, userId, accept) => {
     };
 };
 
+const hasFacilityBookings = async (facilityId) => {
+    const { rows } = await pool.query(
+        `SELECT 1 FROM public.booking_details bd
+                           JOIN public.bookings b ON b.booking_detail_id = bd.booking_detail_id
+         WHERE bd.facility_id = $1 AND b.booking_status = 'upcoming'
+             LIMIT 1`,
+        [facilityId]
+    );
+    return rows.length > 0;
+};
+
 module.exports = {
+    hasFacilityBookings,
     getAvailableSlots,
     submitBookingRequest,
     getPendingRequestsForStaff,

@@ -1,5 +1,22 @@
 const partnerMatchingService = require('../services/partner-matching.service');
 
+const getPartners = async (req, res) => {
+  try {
+    const partners = await partnerMatchingService.getPartners({
+      userId: req.user.id,
+    });
+
+    return res.status(200).json({
+      message: 'partners fetched',
+      data: partners,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      message: error.message || 'failed to get partners',
+    });
+  }
+};
+
 const createMatchRequest = async (req, res) => {
   try {
     const { receiverMemberId } = req.body;
@@ -65,8 +82,62 @@ const updateRequestStatus = async (req, res) => {
   }
 };
 
+const getMyProfile = async (req, res) => {
+  try {
+    const profile = await partnerMatchingService.getMyProfile({
+      userId: req.user.id,
+    });
+    return res.status(200).json({
+      message: 'my partner profile fetched',
+      data: profile,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      message: error.message || 'failed to get partner profile',
+    });
+  }
+};
+
+const upsertMyProfile = async (req, res) => {
+  try {
+    const { bio, sport, skillLevel, availability, preferredTime } = req.body;
+
+    const profile = await partnerMatchingService.upsertMyProfile({
+      userId: req.user.id,
+      bio,
+      sport,
+      skillLevel,
+      availability,
+      preferredTime,
+    });
+
+    return res.status(200).json({
+      message: 'partner profile saved',
+      data: profile,
+    });
+  } catch (error) {
+    const userErrors = {
+      SPORT_REQUIRED: 'sport is required',
+      INVALID_SKILL_LEVEL: 'skill level must be beginner, intermediate, or advanced',
+      AVAILABILITY_REQUIRED: 'availability is required',
+      PREFERRED_TIME_REQUIRED: 'preferred time is required',
+      'member profile not found': 'member profile not found for this account',
+    };
+    const msg = userErrors[error.message];
+    if (msg) {
+      return res.status(400).json({ message: msg });
+    }
+    return res.status(500).json({
+      message: error.message || 'failed to save partner profile',
+    });
+  }
+};
+
 module.exports = {
+  getPartners,
   createMatchRequest,
   getIncomingRequests,
   updateRequestStatus,
+  getMyProfile,
+  upsertMyProfile,
 };

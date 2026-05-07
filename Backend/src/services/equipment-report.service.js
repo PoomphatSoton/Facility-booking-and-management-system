@@ -64,11 +64,19 @@ const getAllReports = async () => {
         u.id AS user_id,
         u.email,
         u.first_name,
-        u.last_name
+        u.last_name,
+        COALESCE(
+          ARRAY_AGG(eiu.equipment_img_url ORDER BY eiu.created_at)
+            FILTER (WHERE eiu.equipment_img_url IS NOT NULL),
+          ARRAY[]::VARCHAR[]
+        ) AS image_urls
       FROM public.equipment_reports er
       LEFT JOIN public.facilities f ON er.facility_id = f.facility_id
       LEFT JOIN public.members m ON er.member_id = m.member_id
       LEFT JOIN public.users u ON m.user_id = u.id
+      LEFT JOIN public.equipment_image_urls eiu ON eiu.report_id = er.report_id
+      GROUP BY er.report_id, er.description, er.status, er.created_at,
+               f.facility_id, f.name, u.id, u.email, u.first_name, u.last_name
       ORDER BY er.created_at DESC
     `
   );

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router";
+import { useAuth } from "./auth-middleware";
 import { Form, Button, Alert, Spinner } from "react-bootstrap";
 import {
   createUserWithEmailAndPassword,
@@ -19,6 +20,7 @@ type UiStep = 1 | 2 | 3;
 
 export default function Register() {
   const navigate = useNavigate();
+  const { setUser } = useAuth();
 
   const [step, setStep] = useState<UiStep>(1);
 
@@ -51,7 +53,13 @@ export default function Register() {
     const session = await authService.checkLogin();
 
     if (session.isPendingStep3) return setStep(3);
-    if (session.isLoggedIn) navigate("/");
+    if (session.isLoggedIn) return navigate("/");
+
+    const fbUser = firebaseAuth.currentUser;
+    if (fbUser && !fbUser.emailVerified) {
+      setEmail(fbUser.email ?? "");
+      setStep(2);
+    }
   };
 
   const handleApiError = (error: unknown) => {
@@ -157,13 +165,14 @@ export default function Register() {
     setIsSubmitting(true);
 
     try {
-      await authService.completeRegister({
+      const { user } = await authService.completeRegister({
         firstName,
         lastName,
         dateOfBirth,
         address,
       });
 
+      setUser(user);
       alert("Profile completed successfully");
       navigate("/");
     } catch (error) {

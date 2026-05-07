@@ -203,6 +203,14 @@
   color: #991b1b;
 }
 
+.partner-profile-label {
+  display: block;
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: #374151;
+  margin-bottom: 0.4rem;
+}
+
 @media (max-width: 576px) {
   .partner-matching-page {
     padding: 1rem;

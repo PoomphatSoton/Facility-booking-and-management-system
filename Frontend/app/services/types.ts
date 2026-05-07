@@ -16,11 +16,20 @@ export type UserRole = "admin" | "member" | "staff";
 export interface User {
   id: string;
   email: string;
-  firstName: string;
-  lastName: string;
-  dateOfBirth: string;
-  address: string;
+  firstName: string | null;
+  lastName: string | null;
+  dateOfBirth: string | null;
+  address: string | null;
   role: UserRole;
+  accountStatus?: string | null;
+  // Member-specific (populated by GET /profile when role === 'member')
+  memberId?: number | null;
+  memberStatus?: string | null;
+  membershipStart?: string | null;
+  membershipExp?: string | null;
+  profileImgUrl?: string | null;
+  // Staff-specific (populated by GET /profile when role === 'staff' | 'admin')
+  staffId?: number | null;
 }
 
 export interface RegisterCredentialsRequest {
@@ -77,10 +86,11 @@ export interface FacilityCardItem {
   usageGuideline: string | null;
   imageUrl: string | null;
   maxPeople: number;
-  slotDate: string;
-  slotToday: string[];
+  maxDurationMinutes: number | null;
   availableTime: FacilityAvailableTime | null;
   otherAvailableTimes: FacilityAvailableTime[];
+  latitude?: number | null;
+  longitude?: number | null;
 }
 
 export interface FacilityCardsResponse {
@@ -93,18 +103,26 @@ export interface FacilityCardsResponse {
 // ==================== Booking ====================
 
 export interface AvailableSlot {
-  slotTimeId: number;
-  slotDate: string;       // 'YYYY-MM-DD'
   startTime: string;      // 'HH:MM'
   endTime: string;        // 'HH:MM'
   occupied: number;
   available: boolean;
 }
 
+export interface FacilitySchedule {
+  dayOfWeek: string;
+  startTime: string;
+  endTime: string;
+}
+
 export interface FacilitySlots {
   facilityId: number;
   facilityName: string;
   maxPeople: number;
+  maxDurationMinutes: number | null;
+  usageGuideline: string | null;
+  schedules: FacilitySchedule[];
+  date: string;           // 'YYYY-MM-DD'
   slots: AvailableSlot[];
 }
 
@@ -121,6 +139,7 @@ export interface SubmitBookingRequestPayload {
   endTime: string;
   intendedActivity: string;
   customTime?: boolean;
+  partnerMemberId?: number;
 }
 
 export interface SubmitBookingRequestResponse {

@@ -1,5 +1,5 @@
 const { pool } = require('../config/db');
-const bcrypt = require('bcryptjs');
+const { auth } = require('../config/firebase');
 
 const getAllStaff = async () => {
     const result = await pool.query(`
@@ -44,18 +44,18 @@ const getAllStaff = async () => {
 };
 
 const createStaff = async ({ username, name, password, facilityIds = [] }) => {
+    const firebaseUser = await auth.createUser({ email: username, password });
+
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
 
-        const passwordHash = await bcrypt.hash(password, 10);
-
         const userResult = await client.query(
             `
-        INSERT INTO public.users (email, password_hash, first_name, role)
+        INSERT INTO public.users (email, firebase_uid, first_name, role)
         VALUES ($1, $2, $3, 'staff')
         RETURNING id
-        `, [username, passwordHash, name]);
+        `, [username, firebaseUser.uid, name]);
 
         const userId = userResult.rows[0].id;
 
@@ -102,23 +102,24 @@ const updateStaff = async (staffId, { username, name, password, facilityIds = []
         const userId = staffResult.rows[0].user_id;
 
         if (password) {
-            const passwordHash = await bcrypt.hash(password, 10);
+            const { rows: userRows } = await client.query(
+                `SELECT firebase_uid FROM public.users WHERE id = $1`, [userId]
+            );
+            if (userRows[0]?.firebase_uid) {
+                await auth.updateUser(userRows[0].firebase_uid, { password });
+            }
             await client.query(
-                `
-            UPDATE public.users
-            SET email = $1, first_name = $2, password_hash = $3
-            WHERE id = $4
-            `,[username, name, passwordHash, userId]);
+                `UPDATE public.users SET email = $1, first_name = $2 WHERE id = $3`,
+                [username, name, userId]
+            );
         } else {
             await client.query(
-                `
-            UPDATE public.users
-            SET email = $1, first_name = $2
-            WHERE id = $3
-            `, [username, name, userId]);
+                `UPDATE public.users SET email = $1, first_name = $2 WHERE id = $3`,
+                [username, name, userId]
+            );
         }
 
-        // Delete and create new facility
+        // Delete and create new facility that staff handle
         await client.query(
             `DELETE FROM public.staff_facilities WHERE staff_id = $1`,
             [staffId]
@@ -158,9 +159,16 @@ const deleteStaff = async (staffId) => {
 
         const userId = staffResult.rows[0].user_id;
 
-        await client.query(`DELETE FROM public.users WHERE id = $1`, [userId]);
+        const { rows: userRows } = await client.query(
+            `DELETE FROM public.users WHERE id = $1 RETURNING firebase_uid`, [userId]
+        );
 
         await client.query('COMMIT');
+
+        if (userRows[0]?.firebase_uid) {
+            await auth.deleteUser(userRows[0].firebase_uid).catch(() => {});
+        }
+
         return { staffId };
     } catch (error) {
         await client.query('ROLLBACK');

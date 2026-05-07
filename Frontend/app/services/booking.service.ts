@@ -17,10 +17,9 @@ import type {
 } from "./types";
 
 export const bookingService = {
-    // Retrieve the available time slots for a specific facility
-    async getAvailableSlots(facilityId: number): Promise<FacilitySlotsResponse> {
+    async getAvailableSlots(facilityId: number, date: string): Promise<FacilitySlotsResponse> {
         const response = await api.get<FacilitySlotsResponse>(
-            `/bookings/facilities/${facilityId}/slots`
+            `/bookings/facilities/${facilityId}/slots?date=${date}`
         );
         return response.data;
     },

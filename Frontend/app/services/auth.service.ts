@@ -43,19 +43,20 @@ export const authService = {
   },
 
   login: async (email: string, password: string): Promise<{ user: User }> => {
-    const credential = await signInWithEmailAndPassword(
-      firebaseAuth,
-      email,
-      password,
-    );
+    await signInWithEmailAndPassword(firebaseAuth, email, password);
 
-    if (!credential.user.emailVerified) {
-      await signOut(firebaseAuth);
-      throw new Error("Please verify your email before logging in.");
+    try {
+      const { data } = await api.get<{ user: User }>("/auth/me");
+      return data;
+    } catch (err: unknown) {
+      const msg = (err as { message?: string }).message;
+      if (msg === "email is not verified") {
+        const e = new Error("Email not verified") as Error & { code: string };
+        e.code = "email-not-verified";
+        throw e;
+      }
+      throw err;
     }
-    const token = await credential.user.getIdToken(true);
-    const { data } = await api.get<{ user: User }>("/auth/me");
-    return data;
   },
 
   loginWithGoogle: async (): Promise<{ user: User; nextStep: string | null }> => {

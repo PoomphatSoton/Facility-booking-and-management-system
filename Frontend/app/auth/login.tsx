@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router";
+import { useAuth } from "./auth-middleware";
 import { Form, Button, Alert, Spinner } from "react-bootstrap";
 import "./auth.css";
 import { authService } from "~/services/auth.service";
@@ -8,11 +9,11 @@ import {
   APP_BRAND_SUBTITLE,
   APP_BRAND_TAGLINE,
 } from "~/constants/app.constants";
-import type { ApiError } from "~/services/types";
 import googleIcon from "~/image/google.png";
 
 export default function Login() {
   const navigate = useNavigate();
+  const { setUser } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -26,6 +27,7 @@ export default function Login() {
       if (nextStep === "details") {
         navigate("/auth/register?step=3");
       } else {
+        setUser(user);
         navigate(user.role === "admin" ? "/admin" : "/");
       }
     } catch (error) {
@@ -43,14 +45,17 @@ export default function Login() {
     setIsSubmitting(true);
     try {
       const { user } = await authService.login(email, password);
-      navigate(user.role === "admin" ? "/admin" : "/");
+      setUser(user);
+      navigate("/");
     } catch (error) {
-      const apiError = error as ApiError;
+      const anyError = error as { code?: string; message?: string };
 
-      if (apiError.message?.startsWith("auth/")) {
+      if (anyError.code === "email-not-verified") {
+        navigate("/auth/register");
+      } else if (anyError.code?.startsWith("auth/")) {
         setErrorMessage("Email or password is incorrect");
       } else {
-        setErrorMessage(apiError.message || "Login failed");
+        setErrorMessage(anyError.message || "Login failed");
       }
     } finally {
       setIsSubmitting(false);

@@ -22,16 +22,11 @@ export type FacilityPayload = {
   usageGuideline: string;
   imageUrl?: string | null;
   maxPeople: number;
+  maxDurationMinutes?: number | null;
   schedules: Array<{
     dayOfWeek: "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
     startTime: string;
     endTime: string;
-  }>;
-  slotTimes: Array<{
-    slotDate: string;
-    startTime: string;
-    endTime: string;
-    isBooking?: boolean;
   }>;
 };
 

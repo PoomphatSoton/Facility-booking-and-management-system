@@ -10,17 +10,18 @@ const requireAuth = async (req, res, next) => {
 
   try {
     const decoded = await auth.verifyIdToken(token);
-    if (!decoded.email_verified) {
-      return res.status(403).json({ message: "email is not verified" });
-    }
-    const user = await userStore.findByFirebaseUid(decoded.uid);
 
+    const user = await userStore.findByFirebaseUid(decoded.uid);
     if (!user) {
       return res.status(401).json({ message: "user not registered in system" });
     }
 
     if (user.accountStatus === "suspended") {
       return res.status(403).json({ message: "account is suspended" });
+    }
+
+    if (user.role === "member" && !decoded.email_verified) {
+      return res.status(403).json({ message: "email is not verified" });
     }
 
     req.user = {

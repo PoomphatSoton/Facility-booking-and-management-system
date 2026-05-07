@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate, useLocation } from "react-router";
+import { useNavigate, useLocation, Link } from "react-router";
 import FacilityCard from "./facility-card";
 import "./facility.css";
 import "../admin/admin-page.css";
@@ -10,16 +10,13 @@ import type { FacilityCardItem } from "~/services/types";
 
 export type Opening = { day: string; startTime: Date; endTime: Date };
 
-export type Slot = { start: Date; end: Date };
-
 export type FacilityItem = {
     facilityId: number;
     name: string;
     description: string;
     openings: Opening[];
-    slotToday: Slot[];
-    slotByDate: Array<{ date: string; slots: Slot[] }>;
     maxPeople: number;
+    maxDurationMinutes: number | null;
     usageGuidelines: string[];
     imageUrl: string;
     openTime: Date;
@@ -48,11 +45,6 @@ const timeStrToDate = (t: string): Date => {
     return d;
 };
 
-const parseSlot = (s: string): { start: Date; end: Date } => {
-    const [startStr, endStr] = s.split("-");
-    return { start: timeStrToDate(startStr), end: timeStrToDate(endStr) };
-};
-
 const mapCard = (card: FacilityCardItem): FacilityItem => {
     const capitalize = (s: string) => `${s.charAt(0).toUpperCase()}${s.slice(1)}`;
     const usageGuidelines = card.usageGuideline
@@ -72,9 +64,8 @@ const mapCard = (card: FacilityCardItem): FacilityItem => {
             startTime: timeStrToDate(t.startTime),
             endTime: timeStrToDate(t.endTime),
         })),
-        slotToday: card.slotToday.map(parseSlot),
-        slotByDate: [{ date: card.slotDate, slots: card.slotToday.map(parseSlot) }],
         maxPeople: card.maxPeople,
+        maxDurationMinutes: card.maxDurationMinutes ?? null,
         usageGuidelines,
         imageUrl: card.imageUrl ?? "",
         openTime: card.availableTime ? timeStrToDate(card.availableTime.startTime) : new Date(0),
@@ -150,11 +141,18 @@ export default function FacilityList() {
                     <h1>Browse Facilities</h1>
                     <p>Find and reserve sports facilities easily</p>
                 </div>
-                {isAdmin && (
-                    <Button variant="primary" onClick={() => navigate("/admin/facility/create")}>
-                        Create Facility
-                    </Button>
-                )}
+                <div className="d-flex gap-2">
+                    {!isAdmin && (
+                        <Button variant="outline-secondary" as={Link as any} to="/facilities/map">
+                            View on Map
+                        </Button>
+                    )}
+                    {isAdmin && (
+                        <Button variant="primary" onClick={() => navigate("/admin/facility/create")}>
+                            Create Facility
+                        </Button>
+                    )}
+                </div>
             </div>
 
             <div className="facility-toolbar">
@@ -237,9 +235,8 @@ export default function FacilityList() {
                                 name={facility.name}
                                 description={facility.description}
                                 openings={facility.openings}
-                                slotToday={facility.slotToday}
-                                slotByDate={facility.slotByDate}
                                 maxPeople={facility.maxPeople}
+                                maxDurationMinutes={facility.maxDurationMinutes}
                                 usageGuidelines={facility.usageGuidelines}
                                 imageUrl={facility.imageUrl}
                             />
@@ -251,9 +248,8 @@ export default function FacilityList() {
                             name={facility.name}
                             description={facility.description}
                             openings={facility.openings}
-                            slotToday={facility.slotToday}
-                            slotByDate={facility.slotByDate}
                             maxPeople={facility.maxPeople}
+                            maxDurationMinutes={facility.maxDurationMinutes}
                             usageGuidelines={facility.usageGuidelines}
                             imageUrl={facility.imageUrl}
                         />

@@ -7,9 +7,14 @@ type RequestStatus = "pending" | "accepted" | "rejected";
 type PartnerRequestItem = {
   id: number;
   fromName: string;
-  sport: string;
-  message: string;
   status: RequestStatus;
+  bookingRequestId?: number | null;
+  bookingFacilityName?: string | null;
+  bookingDate?: string | null;
+  bookingStartTime?: string | null;
+  bookingEndTime?: string | null;
+  bookingActivity?: string | null;
+  bookingRequestStatus?: string | null;
 };
 
 export default function PartnerRequests() {
@@ -29,9 +34,14 @@ export default function PartnerRequests() {
     return {
       id: item.request_matching_id,
       fromName: fullName,
-      sport: "Activity Match",
-      message: `Partner request received from ${fullName}.`,
       status: item.status,
+      bookingRequestId: item.booking_request_id,
+      bookingFacilityName: item.booking_facility_name,
+      bookingDate: item.booking_date,
+      bookingStartTime: item.booking_start_time,
+      bookingEndTime: item.booking_end_time,
+      bookingActivity: item.booking_intended_activity,
+      bookingRequestStatus: item.booking_request_status,
     };
   };
 
@@ -92,12 +102,26 @@ export default function PartnerRequests() {
                 <p>
                   <strong>From:</strong> {request.fromName}
                 </p>
-                <p>
-                  <strong>Sport:</strong> {request.sport}
-                </p>
-                <p>
-                  <strong>Message:</strong> {request.message}
-                </p>
+
+                {request.bookingFacilityName ? (
+                  <p>
+                    <strong>Linked Booking:</strong>{" "}
+                    {request.bookingFacilityName}
+                    {request.bookingDate
+                      ? ` · ${request.bookingDate}`
+                      : ""}
+                    {request.bookingStartTime && request.bookingEndTime
+                      ? ` · ${request.bookingStartTime} – ${request.bookingEndTime}`
+                      : ""}
+                    {request.bookingActivity
+                      ? ` · ${request.bookingActivity}`
+                      : ""}
+                  </p>
+                ) : (
+                  <p>
+                    <strong>Linked Booking:</strong> None
+                  </p>
+                )}
 
                 <span className={`partner-request-status ${request.status}`}>
                   {request.status}

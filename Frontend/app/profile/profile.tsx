@@ -1,8 +1,13 @@
 import { useEffect, useState } from "react";
 import { Alert, Button, Form, Modal, Spinner } from "react-bootstrap";
+import { Link } from "react-router";
 import { useAuth } from "~/auth/auth-middleware";
 import { profileService } from "~/services/profile.service";
-import type { ApiError } from "~/services/types";
+import {
+  partnerMatchingService,
+  type MyPartnerProfile,
+} from "~/services/partner-matching.service";
+import type { ApiError, User } from "~/services/types";
 import profileIcon from "~/image/profile.png";
 import "./profile.css";
 
@@ -19,8 +24,25 @@ type PasswordForm = {
   confirmPassword: string;
 };
 
+const fmt = (val: string | null | undefined) => val?.trim() || "—";
+
+const fmtDate = (val: string | null | undefined) => {
+  if (!val) return "—";
+  // YYYY-MM-DD → readable date
+  const d = new Date(val + "T00:00:00");
+  return isNaN(d.getTime()) ? val : d.toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
+};
+
 export default function Profile() {
-  const { user } = useAuth();
+  const { user: authUser } = useAuth();
+
+  const [profile, setProfile] = useState<User | null>(null);
+  const [loadingProfile, setLoadingProfile] = useState(true);
+  const [profileLoadError, setProfileLoadError] = useState("");
+
+  const [partnerProfile, setPartnerProfile] = useState<MyPartnerProfile | null>(null);
+  const [loadingPartnerProfile, setLoadingPartnerProfile] = useState(false);
+  const [partnerProfileLoadError, setPartnerProfileLoadError] = useState("");
 
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -31,10 +53,10 @@ export default function Profile() {
   const [passwordError, setPasswordError] = useState("");
 
   const [form, setForm] = useState<ProfileForm>({
-    firstName: user?.firstName ?? "",
-    lastName: user?.lastName ?? "",
-    dateOfBirth: user?.dateOfBirth ?? "",
-    address: user?.address ?? "",
+    firstName: "",
+    lastName: "",
+    dateOfBirth: "",
+    address: "",
   });
 
   const [passwordForm, setPasswordForm] = useState<PasswordForm>({
@@ -44,15 +66,43 @@ export default function Profile() {
   });
 
   useEffect(() => {
-    if (user) {
-      setForm({
-        firstName: user.firstName ?? "",
-        lastName: user.lastName ?? "",
-        dateOfBirth: user.dateOfBirth ?? "",
-        address: user.address ?? "",
-      });
-    }
-  }, [user]);
+    const load = async () => {
+      setLoadingProfile(true);
+      setProfileLoadError("");
+      try {
+        const { user } = await profileService.getProfile();
+        setProfile(user);
+        setForm({
+          firstName: user.firstName ?? "",
+          lastName: user.lastName ?? "",
+          dateOfBirth: user.dateOfBirth ?? "",
+          address: user.address ?? "",
+        });
+      } catch {
+        setProfileLoadError("Failed to load profile. Please refresh the page.");
+      } finally {
+        setLoadingProfile(false);
+      }
+    };
+    void load();
+  }, []);
+
+  useEffect(() => {
+    if (profile?.role !== "member") return;
+    const loadPartnerProfile = async () => {
+      setLoadingPartnerProfile(true);
+      setPartnerProfileLoadError("");
+      try {
+        const result = await partnerMatchingService.getMyProfile();
+        setPartnerProfile(result.data);
+      } catch {
+        setPartnerProfileLoadError("Failed to load partner profile.");
+      } finally {
+        setLoadingPartnerProfile(false);
+      }
+    };
+    void loadPartnerProfile();
+  }, [profile?.role]);
 
   const passwordMismatch =
     passwordForm.confirmPassword.length > 0 &&
@@ -62,20 +112,12 @@ export default function Profile() {
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
   ) => {
     const { name, value } = e.target;
-
-    setForm((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
+    setForm((prev) => ({ ...prev, [name]: value }));
   };
 
   const handlePasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-
-    setPasswordForm((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
+    setPasswordForm((prev) => ({ ...prev, [name]: value }));
   };
 
   const handleEdit = () => {
@@ -87,10 +129,10 @@ export default function Profile() {
   const handleCancel = () => {
     setIsEditing(false);
     setForm({
-      firstName: user?.firstName ?? "",
-      lastName: user?.lastName ?? "",
-      dateOfBirth: user?.dateOfBirth ?? "",
-      address: user?.address ?? "",
+      firstName: profile?.firstName ?? "",
+      lastName: profile?.lastName ?? "",
+      dateOfBirth: profile?.dateOfBirth ?? "",
+      address: profile?.address ?? "",
     });
   };
 
@@ -100,18 +142,17 @@ export default function Profile() {
     setErrorMessage("");
     try {
       const { user: updated } = await profileService.updateProfile(form);
+      setProfile(updated);
       setForm({
-        firstName: updated.firstName,
-        lastName: updated.lastName,
-        dateOfBirth: updated.dateOfBirth,
-        address: updated.address,
+        firstName: updated.firstName ?? "",
+        lastName: updated.lastName ?? "",
+        dateOfBirth: updated.dateOfBirth ?? "",
+        address: updated.address ?? "",
       });
       setIsEditing(false);
       setSuccessMessage("Profile updated successfully.");
     } catch (error) {
-      setErrorMessage(
-        (error as ApiError).message || "Failed to update profile.",
-      );
+      setErrorMessage((error as ApiError).message || "Failed to update profile.");
     } finally {
       setIsSaving(false);
     }
@@ -128,36 +169,43 @@ export default function Profile() {
         passwordForm.newPassword,
       );
       setShowPasswordModal(false);
-      setPasswordForm({
-        currentPassword: "",
-        newPassword: "",
-        confirmPassword: "",
-      });
+      setPasswordForm({ currentPassword: "", newPassword: "", confirmPassword: "" });
       setSuccessMessage("Password changed successfully.");
     } catch (error) {
-      setPasswordError(
-        (error as ApiError).message || "Failed to change password.",
-      );
+      setPasswordError((error as ApiError).message || "Failed to change password.");
     } finally {
       setIsChangingPassword(false);
     }
   };
+
+  if (loadingProfile) {
+    return (
+      <div className="profile-page" style={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: 300 }}>
+        <Spinner animation="border" />
+      </div>
+    );
+  }
 
   return (
     <div className="profile-page">
       <div className="profile-wrapper">
         <aside className="profile-sidebar">
           <div className="profile-avatar-wrap">
-            <img src={profileIcon} alt="avatar" className="profile-avatar" />
+            {profile?.profileImgUrl ? (
+              <img src={profile.profileImgUrl} alt="avatar" className="profile-avatar" />
+            ) : (
+              <img src={profileIcon} alt="avatar" className="profile-avatar" />
+            )}
           </div>
           <p className="profile-sidebar-name">
-            {user?.firstName || "—"} {user?.lastName || ""}
+            {profile?.firstName || authUser?.firstName || "—"}{" "}
+            {profile?.lastName || authUser?.lastName || ""}
           </p>
-          <p className="profile-sidebar-email">{user?.email}</p>
-          <span
-            className={`profile-role-badge profile-role-badge--${user?.role}`}
-          >
-            {user?.role}
+          <p className="profile-sidebar-email">
+            {profile?.email || authUser?.email}
+          </p>
+          <span className={`profile-role-badge profile-role-badge--${profile?.role || authUser?.role}`}>
+            {profile?.role || authUser?.role}
           </span>
 
           <hr className="profile-sidebar-divider" />
@@ -172,45 +220,31 @@ export default function Profile() {
         </aside>
 
         <main className="profile-main">
+          {profileLoadError && (
+            <Alert variant="danger" className="mb-3">{profileLoadError}</Alert>
+          )}
           {successMessage && (
-            <Alert
-              variant="success"
-              dismissible
-              onClose={() => setSuccessMessage("")}
-              className="mb-3"
-            >
+            <Alert variant="success" dismissible onClose={() => setSuccessMessage("")} className="mb-3">
               {successMessage}
             </Alert>
           )}
           {errorMessage && (
-            <Alert
-              variant="danger"
-              dismissible
-              onClose={() => setErrorMessage("")}
-              className="mb-3"
-            >
+            <Alert variant="danger" dismissible onClose={() => setErrorMessage("")} className="mb-3">
               {errorMessage}
             </Alert>
           )}
 
+          {/* Personal Information — editable */}
           <div className="profile-card">
             <div className="profile-card-header">
               <h2 className="profile-card-title">Personal Information</h2>
               {!isEditing ? (
-                <Button
-                  variant="outline-primary"
-                  size="sm"
-                  onClick={handleEdit}
-                >
+                <Button variant="outline-primary" size="sm" onClick={handleEdit}>
                   Edit
                 </Button>
               ) : (
                 <div className="d-flex gap-2">
-                  <Button
-                    variant="outline-secondary"
-                    size="sm"
-                    onClick={handleCancel}
-                  >
+                  <Button variant="outline-secondary" size="sm" onClick={handleCancel}>
                     Cancel
                   </Button>
                   <Button
@@ -220,21 +254,13 @@ export default function Profile() {
                     type="submit"
                     disabled={isSaving}
                   >
-                    {isSaving ? (
-                      <Spinner animation="border" size="sm" />
-                    ) : (
-                      "Save"
-                    )}
+                    {isSaving ? <Spinner animation="border" size="sm" /> : "Save"}
                   </Button>
                 </div>
               )}
             </div>
 
-            <Form
-              id="profile-form"
-              onSubmit={handleSave}
-              className="profile-fields-grid"
-            >
+            <Form id="profile-form" onSubmit={handleSave} className="profile-fields-grid">
               <div className="profile-field">
                 <label className="profile-label">First Name</label>
                 {isEditing ? (
@@ -245,7 +271,7 @@ export default function Profile() {
                     required
                   />
                 ) : (
-                  <p className="profile-value">{form.firstName || "—"}</p>
+                  <p className="profile-value">{fmt(form.firstName)}</p>
                 )}
               </div>
 
@@ -256,10 +282,9 @@ export default function Profile() {
                     value={form.lastName}
                     onChange={handleProfileChange}
                     name="lastName"
-                    required
                   />
                 ) : (
-                  <p className="profile-value">{form.lastName || "—"}</p>
+                  <p className="profile-value">{fmt(form.lastName)}</p>
                 )}
               </div>
 
@@ -274,14 +299,14 @@ export default function Profile() {
                     max={new Date().toISOString().split("T")[0]}
                   />
                 ) : (
-                  <p className="profile-value">{form.dateOfBirth || "—"}</p>
+                  <p className="profile-value">{fmtDate(form.dateOfBirth)}</p>
                 )}
               </div>
 
               <div className="profile-field">
                 <label className="profile-label">Email</label>
                 <p className="profile-value profile-value--muted">
-                  {user?.email}
+                  {profile?.email || authUser?.email}
                 </p>
               </div>
 
@@ -296,19 +321,98 @@ export default function Profile() {
                     name="address"
                   />
                 ) : (
-                  <p className="profile-value">{form.address || "—"}</p>
+                  <p className="profile-value">{fmt(form.address)}</p>
                 )}
               </div>
             </Form>
           </div>
+
+          {/* Partner Matching Profile — members only */}
+          {profile?.role === "member" && (
+            <div className="profile-card" style={{ marginTop: "1.5rem" }}>
+              <div className="profile-card-header">
+                <h2 className="profile-card-title">Partner Matching Profile</h2>
+                {partnerProfile && (
+                  <Button as={Link} to="/my-partner-profile" variant="outline-primary" size="sm">
+                    Edit Partner Profile
+                  </Button>
+                )}
+              </div>
+
+              {loadingPartnerProfile ? (
+                <div className="d-flex justify-content-center py-3">
+                  <Spinner animation="border" size="sm" />
+                </div>
+              ) : partnerProfileLoadError ? (
+                <Alert variant="danger" className="mb-0">{partnerProfileLoadError}</Alert>
+              ) : partnerProfile ? (
+                <div className="profile-fields-grid">
+                  <div className="profile-field">
+                    <label className="profile-label">Preferred Sport</label>
+                    <p className="profile-value">{fmt(partnerProfile.sport)}</p>
+                  </div>
+
+                  <div className="profile-field">
+                    <label className="profile-label">Skill Level</label>
+                    <p className="profile-value">
+                      {partnerProfile.skill_level
+                        ? partnerProfile.skill_level.charAt(0).toUpperCase() + partnerProfile.skill_level.slice(1)
+                        : "—"}
+                    </p>
+                  </div>
+
+                  <div className="profile-field">
+                    <label className="profile-label">Availability</label>
+                    <p className="profile-value">{fmt(partnerProfile.availability)}</p>
+                  </div>
+
+                  <div className="profile-field">
+                    <label className="profile-label">Preferred Time</label>
+                    <p className="profile-value">{fmt(partnerProfile.preferred_time)}</p>
+                  </div>
+
+                  {partnerProfile.bio && (
+                    <div className="profile-field profile-field--full">
+                      <label className="profile-label">Bio</label>
+                      <p className="profile-value">{partnerProfile.bio}</p>
+                    </div>
+                  )}
+
+                  <div className="profile-field profile-field--full">
+                    <label className="profile-label">Status</label>
+                    <p className="profile-value">
+                      <span
+                        style={{
+                          display: "inline-block",
+                          fontSize: "0.82rem",
+                          fontWeight: 600,
+                          borderRadius: "999px",
+                          padding: "0.25rem 0.75rem",
+                          background: "#dcfce7",
+                          color: "#166534",
+                        }}
+                      >
+                        Active — visible to other members
+                      </span>
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ padding: "0.5rem 0" }}>
+                  <p className="profile-value profile-value--muted" style={{ marginBottom: "1rem" }}>
+                    You have not created a partner matching profile yet.
+                  </p>
+                  <Button as={Link} to="/my-partner-profile" variant="primary" size="sm">
+                    Create Partner Profile
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
         </main>
       </div>
 
-      <Modal
-        show={showPasswordModal}
-        onHide={() => setShowPasswordModal(false)}
-        centered
-      >
+      <Modal show={showPasswordModal} onHide={() => setShowPasswordModal(false)} centered>
         <Modal.Header closeButton>
           <Modal.Title>Change Password</Modal.Title>
         </Modal.Header>
@@ -363,11 +467,7 @@ export default function Profile() {
               type="submit"
               disabled={passwordMismatch || isChangingPassword}
             >
-              {isChangingPassword ? (
-                <Spinner animation="border" size="sm" />
-              ) : (
-                "Update Password"
-              )}
+              {isChangingPassword ? <Spinner animation="border" size="sm" /> : "Update Password"}
             </Button>
           </Modal.Footer>
         </Form>
